@@ -1,12 +1,22 @@
 {
-  "name": "apartment-manager-backend",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+	"name": "apartment-manager-backend",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"scripts": {
+		"serve": "nodemon --exec babel-node src/index.js",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"express": "^4.18.1"
+	},
+	"devDependencies": {
+		"@babel/core": "^7.18.0",
+		"@babel/node": "^7.17.10",
+		"@babel/preset-env": "^7.18.0",
+		"nodemon": "^2.0.16"
+	}
 }
