@@ -2,9 +2,8 @@ module.exports = {
 	User: [
 		{
 			ObjectId: 111,
-			username: "ihorvat",
-			password: "hash-hash-hash",
 			email: "ivan.horvat@gmail.com",
+			password: "hash-hash-hash",
 			firstName: "Ivan",
 			lastName: "Horvat",
 			privateAccomodations: [
@@ -35,9 +34,8 @@ module.exports = {
 		},
 		{
 			ObjectId: 111,
-			username: "iivic",
-			password: "hash-hash-hash",
 			email: "ivo.ivic@gmail.com",
+			password: "hash-hash-hash",
 			firstName: "Ivo",
 			lastName: "Ivic",
 			privateAccomodations: [],

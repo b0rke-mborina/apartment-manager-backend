@@ -4,10 +4,18 @@ import storage from './storage.js'
 const app = express();
 const port = 3000;
 
+app.use(express.json());
 
-// unfinished
 app.get('/', (req, res) => {
-	res.send(storage.User);
+	let data = {
+		privateAccomodations: storage.PrivateAccomodation
+			.sort((first, second) => first.currentState - second.currentState)
+			.slice(0, 3),
+		reservations: storage.Reservation
+			.sort((first, second) => first.currentState - second.currentState)
+			.slice(0, 3)
+	};
+	res.send([storage.User, data]);
 });
 
 
@@ -16,6 +24,15 @@ app.get('/', (req, res) => {
 // get all private accomodations
 app.get('/privateaccomodations', (req, res) => {
 	res.send(storage.PrivateAccomodation);
+});
+
+// add / insert one private accomodation
+app.post('/privateaccomodations', (req, res) => {
+	let data = req.body;
+	console.log(data);
+	res.statusCode = 201;
+	res.setHeader('Location', '/privateaccomodations');
+	res.send();
 });
 
 // get one private accomodation
@@ -57,6 +74,15 @@ app.get('/reservations', (req, res) => {
 	res.send(storage.Reservation);
 });
 
+// add / insert one reservation
+app.post('/reservations', (req, res) => {
+	let data = req.body;
+	console.log(data);
+	res.statusCode = 201;
+	res.setHeader('Location', '/reservations');
+	res.send();
+});
+
 // get one reservation
 app.get('/reservations/:id', (req, res) => {
 	let reservationId = req.params.id;
@@ -85,6 +111,15 @@ app.get('/periods', (req, res) => {
 	res.send(storage.Period);
 });
 
+// add / insert one period
+app.post('/periods', (req, res) => {
+	let data = req.body;
+	console.log(data);
+	res.statusCode = 201;
+	res.setHeader('Location', '/periods');
+	res.send();
+});
+
 // get one period
 app.get('/periods/:id', (req, res) => {
 	let periodId = req.params.id;
@@ -98,6 +133,15 @@ app.get('/periods/:id', (req, res) => {
 // get all guests
 app.get('/guests', (req, res) => {
 	res.send(storage.Guest);
+});
+
+// add / insert one guest
+app.post('/guests', (req, res) => {
+	let data = req.body;
+	console.log(data);
+	res.statusCode = 201;
+	res.setHeader('Location', '/guests');
+	res.send();
 });
 
 // get one guest
@@ -115,6 +159,15 @@ app.get('/notes', (req, res) => {
 	res.send(storage.Note);
 });
 
+// add / insert one note
+app.post('/notes', (req, res) => {
+	let data = req.body;
+	console.log(data);
+	res.statusCode = 201;
+	res.setHeader('Location', '/notes');
+	res.send();
+});
+
 // get one note
 app.get('/notes/:id', (req, res) => {
 	let noteId = req.params.id;
@@ -128,6 +181,15 @@ app.get('/notes/:id', (req, res) => {
 // get all to do lists
 app.get('/todolists', (req, res) => {
 	res.send(storage.ToDoList);
+});
+
+// add / insert one to do list
+app.post('/todolists', (req, res) => {
+	let data = req.body;
+	console.log(data);
+	res.statusCode = 201;
+	res.setHeader('Location', '/todolists');
+	res.send();
 });
 
 // get one to do list
