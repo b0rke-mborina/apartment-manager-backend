@@ -6,6 +6,11 @@ const port = 3000;
 
 app.use(express.json());
 
+
+
+// =============== default route or path ===============
+
+// get data
 app.get('/', (req, res) => {
 	let data = {
 		privateAccomodations: storage.PrivateAccomodation
@@ -19,7 +24,11 @@ app.get('/', (req, res) => {
 });
 
 
+
 // =============== PrivateAccomodation ===============
+
+
+// route or path: /privateaccomodations
 
 // get all private accomodations
 app.get('/privateaccomodations', (req, res) => {
@@ -35,12 +44,54 @@ app.post('/privateaccomodations', (req, res) => {
 	res.send();
 });
 
+
+// route or path: /privateaccomodations/:id
+
 // get one private accomodation
 app.get('/privateaccomodations/:id', (req, res) => {
 	let privateAccomodationId = req.params.id;
 	let privateAccomodation = storage.PrivateAccomodation.filter(item => item.ObjectId == privateAccomodationId)[0];
 	res.send(privateAccomodation);
 });
+
+// delete one private accomodation
+app.delete('/privateaccomodations/:id', (req, res) => {
+	let privateAccomodationId = req.params.id;
+	res.statusCode = 204;
+	res.setHeader('Location', '/privateaccomodations/' + privateAccomodationId);
+	res.send();
+});
+
+// update one private accomodation using patch
+app.patch('/privateaccomodations/:id', (req, res) => {
+	let privateAccomodationId = req.params.id;
+	let data = req.body;
+	console.log(data);
+	res.statusCode = 200;
+	res.setHeader('Location', '/privateaccomodations/' + privateAccomodationId);
+	res.send();
+});
+
+// update one private accomodation using put
+app.put('/privateaccomodations/:id', (req, res) => {
+	let privateAccomodationId = req.params.id;
+	let data = req.body;
+	if (
+			!data.name || !data.categoryStarNumber || !data.maxGuestNumber || !data.currentState
+			|| !data.location || !data.numberofFloors || data.hasYard == null || data.lowestFloor == null
+			|| Object.keys(data).length != 9
+		) {
+		res.statusCode = 400;
+		return res.send();
+	}
+	console.log(data);
+	res.statusCode = 200;
+	res.setHeader('Location', '/privateaccomodations/' + privateAccomodationId);
+	res.send();
+});
+
+
+// route or path: /privateaccomodations/:id/address
 
 // get address of one private accomodation
 app.get('/privateaccomodations/:id/address', (req, res) => {
@@ -52,12 +103,28 @@ app.get('/privateaccomodations/:id/address', (req, res) => {
 });
 
 
+
 // =============== Address ===============
+
+
+// route or path: /addresses
 
 // get all addresses
 app.get('/addresses', (req, res) => {
 	res.send(storage.Address);
 });
+
+// add / insert one address
+app.post('/addresses', (req, res) => {
+	let data = req.body;
+	console.log(data);
+	res.statusCode = 201;
+	res.setHeader('Location', '/addresses');
+	res.send();
+});
+
+
+// route or path: /addresses/:id
 
 // get one address
 app.get('/addresses/:id', (req, res) => {
@@ -66,8 +133,47 @@ app.get('/addresses/:id', (req, res) => {
 	res.send(address);
 });
 
+// delete one address
+app.delete('/addresses/:id', (req, res) => {
+	let addressId = req.params.id;
+	res.statusCode = 204;
+	res.setHeader('Location', '/addresses/' + addressId);
+	res.send();
+});
+
+// update one address using patch
+app.patch('/addresses/:id', (req, res) => {
+	let addressId = req.params.id;
+	let data = req.body;
+	console.log(data);
+	res.statusCode = 200;
+	res.setHeader('Location', '/addresses/' + addressId);
+	res.send();
+});
+
+// update one address using put
+app.put('/addresses/:id', (req, res) => {
+	let addressId = req.params.id;
+	let data = req.body;
+	if (
+			!data.street || !data.houseNumber || !data.entranceNumber || !data.postalNumber || !data.city
+			|| Object.keys(data).length != 6
+		) {
+		res.statusCode = 400;
+		return res.send();
+	}
+	console.log(data);
+	res.statusCode = 200;
+	res.setHeader('Location', '/addresses/' + addressId);
+	res.send();
+});
+
+
 
 // =============== Reservation ===============
+
+
+// route or path: /reservations
 
 // get all reservations
 app.get('/reservations', (req, res) => {
@@ -83,12 +189,54 @@ app.post('/reservations', (req, res) => {
 	res.send();
 });
 
+
+// route or path: /reservations/:id
+
 // get one reservation
 app.get('/reservations/:id', (req, res) => {
 	let reservationId = req.params.id;
 	let reservation = storage.Reservation.filter(item => item.ObjectId == reservationId)[0];
 	res.send(reservation);
 });
+
+// delete one reservation
+app.delete('/reservations/:id', (req, res) => {
+	let reservationId = req.params.id;
+	res.statusCode = 204;
+	res.setHeader('Location', '/reservations/' + reservationId);
+	res.send();
+});
+
+// update one reservation using patch
+app.patch('/reservations/:id', (req, res) => {
+	let reservationId = req.params.id;
+	let data = req.body;
+	console.log(data);
+	res.statusCode = 200;
+	res.setHeader('Location', '/reservations/' + reservationId);
+	res.send();
+});
+
+// update one reservation using put
+app.put('/reservations/:id', (req, res) => {
+	let reservationId = req.params.id;
+	let data = req.body;
+	if (
+			!data.period || !data.madeByGuest || !data.guests || data.guests.length==0 || !data.currentState
+			|| !data.price.value || !data.price.currency || !data.price.valueInEur
+			|| Object.keys(data).length != 6
+		) {
+		res.statusCode = 400;
+		return res.send();
+	}
+	console.log(data);
+	res.statusCode = 200;
+	res.setHeader('Location', '/reservations/' + reservationId);
+	res.send();
+});
+
+
+// route or path: /reservations/:id/guests
 
 // get price of one reservation
 app.get('/reservations/:id/guests', (req, res) => {
@@ -104,7 +252,11 @@ app.get('/reservations/:id/guests', (req, res) => {
 });
 
 
+
 // =============== Period ===============
+
+
+// route or path: /periods
 
 // get all periods
 app.get('/periods', (req, res) => {
@@ -120,6 +272,9 @@ app.post('/periods', (req, res) => {
 	res.send();
 });
 
+
+// route or path: /periods/:id
+
 // get one period
 app.get('/periods/:id', (req, res) => {
 	let periodId = req.params.id;
@@ -127,8 +282,46 @@ app.get('/periods/:id', (req, res) => {
 	res.send(period);
 });
 
+// delete one period
+app.delete('/periods/:id', (req, res) => {
+	let periodId = req.params.id;
+	res.statusCode = 204;
+	res.setHeader('Location', '/periods/' + periodId);
+	res.send();
+});
+
+// update one period using patch
+app.patch('/periods/:id', (req, res) => {
+	let periodId = req.params.id;
+	let data = req.body;
+	console.log(data);
+	res.statusCode = 200;
+	res.setHeader('Location', '/periods/' + periodId);
+	res.send();
+});
+
+// update one period using put
+app.put('/periods/:id', (req, res) => {
+	let periodId = req.params.id;
+	let data = req.body;
+	if (
+			!data.startDate || !data.endDate || Object.keys(data).length != 3
+		) {
+		res.statusCode = 400;
+		return res.send();
+	}
+	console.log(data);
+	res.statusCode = 200;
+	res.setHeader('Location', '/periods/' + periodId);
+	res.send();
+});
+
+
 
 // =============== Guest ===============
+
+
+// route or path: /guests
 
 // get all guests
 app.get('/guests', (req, res) => {
@@ -144,6 +337,9 @@ app.post('/guests', (req, res) => {
 	res.send();
 });
 
+
+// route or path: /guests/:id
+
 // get one guest
 app.get('/guests/:id', (req, res) => {
 	let guestId = req.params.id;
@@ -151,8 +347,47 @@ app.get('/guests/:id', (req, res) => {
 	res.send(guest);
 });
 
+// delete one guest
+app.delete('/guests/:id', (req, res) => {
+	let guestId = req.params.id;
+	res.statusCode = 204;
+	res.setHeader('Location', '/guests/' + guestId);
+	res.send();
+});
+
+// update one guest using patch
+app.patch('/guests/:id', (req, res) => {
+	let guestId = req.params.id;
+	let data = req.body;
+	console.log(data);
+	res.statusCode = 200;
+	res.setHeader('Location', '/guests/' + guestId);
+	res.send();
+});
+
+// update one guest using put
+app.put('/guests/:id', (req, res) => {
+	let guestId = req.params.id;
+	let data = req.body;
+	if (
+			!data.firstName || !data.firstName || !data.email || !data.phoneNumber || !data.country || !data.city
+			|| Object.keys(data).length != 7
+		) {
+		res.statusCode = 400;
+		return res.send();
+	}
+	console.log(data);
+	res.statusCode = 200;
+	res.setHeader('Location', '/guests/' + guestId);
+	res.send();
+});
+
+
 
 // =============== Note ===============
+
+
+// route or path: /notes
 
 // get all notes
 app.get('/notes', (req, res) => {
@@ -168,6 +403,9 @@ app.post('/notes', (req, res) => {
 	res.send();
 });
 
+
+// route or path: /notes/:id
+
 // get one note
 app.get('/notes/:id', (req, res) => {
 	let noteId = req.params.id;
@@ -175,8 +413,47 @@ app.get('/notes/:id', (req, res) => {
 	res.send(note);
 });
 
+// delete one note
+app.delete('/notes/:id', (req, res) => {
+	let noteId = req.params.id;
+	res.statusCode = 204;
+	res.setHeader('Location', '/notes/' + noteId);
+	res.send();
+});
+
+// update one note using patch
+app.patch('/notes/:id', (req, res) => {
+	let noteId = req.params.id;
+	let data = req.body;
+	console.log(data);
+	res.statusCode = 200;
+	res.setHeader('Location', '/notes/' + noteId);
+	res.send();
+});
+
+// update one note using put
+app.put('/notes/:id', (req, res) => {
+	let noteId = req.params.id;
+	let data = req.body;
+	if (
+			!data.header || !data.body || data.important==null
+			|| Object.keys(data).length != 4
+		) {
+		res.statusCode = 400;
+		return res.send();
+	}
+	console.log(data);
+	res.statusCode = 200;
+	res.setHeader('Location', '/notes/' + noteId);
+	res.send();
+});
+
+
 
 // =============== ToDoList ===============
+
+
+// route or path: /todolists
 
 // get all to do lists
 app.get('/todolists', (req, res) => {
@@ -192,12 +469,51 @@ app.post('/todolists', (req, res) => {
 	res.send();
 });
 
+
+// route or path: /todolists/:id
+
 // get one to do list
 app.get('/todolists/:id', (req, res) => {
 	let toDoListId = req.params.id;
 	let toDoList = storage.ToDoList.filter(item => item.ObjectId == toDoListId)[0];
 	res.send(toDoList);
 });
+
+// delete one to do list
+app.delete('/todolists/:id', (req, res) => {
+	let toDoListId = req.params.id;
+	res.statusCode = 204;
+	res.setHeader('Location', '/todolists/' + toDoListId);
+	res.send();
+});
+
+// update one to do list using patch
+app.patch('/todolists/:id', (req, res) => {
+	let toDoListId = req.params.id;
+	let data = req.body;
+	console.log(data);
+	res.statusCode = 200;
+	res.setHeader('Location', '/todolists/' + toDoListId);
+	res.send();
+});
+
+// update one to do list using put
+app.put('/todolists/:id', (req, res) => {
+	let toDoListId = req.params.id;
+	let data = req.body;
+	if (
+			!data.title || !data.type || !data.date || !data.items || data.items.length==0 || data.completed==null
+			|| Object.keys(data).length != 6
+		) {
+		res.statusCode = 400;
+		return res.send();
+	}
+	console.log(data);
+	res.statusCode = 200;
+	res.setHeader('Location', '/todolists/' + toDoListId);
+	res.send();
+});
+
 
 
 app.listen(port, () => console.log(`Listening on port ${port}!`));
