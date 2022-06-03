@@ -20,7 +20,19 @@ app.get('/', (req, res) => {
 			.sort((first, second) => first.currentState - second.currentState)
 			.slice(0, 3)
 	};
-	res.send([storage.User, data]);
+	res.send([storage.User[0], data]);
+});
+
+
+
+// =============== Users and authentication ===============
+
+
+// route or path: /user/current
+
+// get current user
+app.get('/user/current', (req, res) => {
+	res.send(storage.User[0]);
 });
 
 
