@@ -14,7 +14,7 @@ app.use(express.json());
 app.get('/', (req, res) => {
 	let data = {
 		privateAccomodations: storage.PrivateAccomodation
-			.sort((first, second) => first.currentState - second.currentState)
+			.sort((first, second) => first.name - second.name)
 			.slice(0, 3),
 		reservations: storage.Reservation
 			.sort((first, second) => first.currentState - second.currentState)
@@ -89,8 +89,8 @@ app.put('/privateaccomodations/:id', (req, res) => {
 	let privateAccomodationId = req.params.id;
 	let data = req.body;
 	if (
-			!data.name || !data.categoryStarNumber || !data.maxGuestNumber || !data.currentState
-			|| !data.location || !data.numberofFloors || data.hasYard == null || data.lowestFloor == null
+			!data.name || !data.categoryStarNumber || !data.maxGuestNumber || !data.location
+			|| !data.numberofFloors || data.hasYard == null || data.lowestFloor == null
 			|| Object.keys(data).length != 9
 		) {
 		res.statusCode = 400;
@@ -317,7 +317,7 @@ app.put('/periods/:id', (req, res) => {
 	let periodId = req.params.id;
 	let data = req.body;
 	if (
-			!data.startDate || !data.endDate || Object.keys(data).length != 3
+			!data.start || !data.end || Object.keys(data).length != 3
 		) {
 		res.statusCode = 400;
 		return res.send();
@@ -524,6 +524,18 @@ app.put('/todolists/:id', (req, res) => {
 	res.statusCode = 200;
 	res.setHeader('Location', '/todolists/' + toDoListId);
 	res.send();
+});
+
+
+
+// =============== Analytics ===============
+
+
+// route or path: /analytics
+
+// get analytics
+app.get('/analytics', (req, res) => {
+	res.send(storage.Analytics);
 });
 
 

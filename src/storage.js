@@ -22,6 +22,10 @@ export default {
 				111,
 				211
 			],
+			guests: [
+				111,
+				211
+			],
 			notes: [
 				111,
 				211,
@@ -30,7 +34,8 @@ export default {
 			toDoLists: [
 				111,
 				211
-			]
+			],
+			analytics: 1111
 		},
 		{
 			ObjectId: 111,
@@ -43,7 +48,8 @@ export default {
 			reservations: [],
 			periods: [],
 			notes: [],
-			toDoLists: []
+			toDoLists: [],
+			analytics: 1112
 		}
 	],
 	PrivateAccomodation: [
@@ -52,7 +58,6 @@ export default {
 			name: "Apartment Nature",
 			categoryStarNumber: 3,
 			maxGuestNumber: 6,
-			currentState: "AVAILABLE",
 			location: 111,
 			hasYard: true,
 			lowestFloor: 0,
@@ -63,7 +68,6 @@ export default {
 			name: "Apartment Marie",
 			categoryStarNumber: 4,
 			maxGuestNumber: 4,
-			currentState: "OCCUPIED",
 			location: 111,
 			hasYard: false,
 			lowestFloor: 1,
@@ -125,13 +129,15 @@ export default {
 	Period: [
 		{
 			ObjectId: 111,
-			startDate: "2022-07-04",
-			endDate: "2022-07-15"
+			start: "2022-07-04",
+			end: "2022-07-15",
+			privateAccomodation: 111
 		},
 		{
 			ObjectId: 211,
-			startDate: "2022-08-01",
-			endDate: "2022-08-14"
+			start: "2022-08-01",
+			end: "2022-08-14",
+			privateAccomodation: 111
 		}
 	],
 	Guest: [
@@ -157,19 +163,19 @@ export default {
 	Note: [
 		{
 			ObjectId: 111,
-			header: "Porez",
+			heading: "Porez",
 			body: "Treba platiti porez do 20.7.",
 			important: true
 		},
 		{
 			ObjectId: 211,
-			header: "Sezona",
+			heading: "Sezona",
 			body: "Počinje 1.6. a završava 31.8.",
 			important: false
 		},
 		{
 			ObjectId: 311,
-			header: "Košnja trave",
+			heading: "Košnja trave",
 			body: "Treba pokositi travu prije dolaska prvih gostiju",
 			important: true
 		}
@@ -178,17 +184,18 @@ export default {
 		{
 			ObjectId: 111,
 			title: "Čišćenje",
-			type: "repeating",
 			date: "2022-08-05",
 			items: [
 				{
 					ObjectId: 111,
 					name: "Očistiti kuhinju",
+					position: 0,
 					completed: true
 				},
 				{
 					ObjectId: 112,
 					name: "Očistiti kupaonicu",
+					position: 1,
 					completed: false
 				}
 			],
@@ -197,21 +204,55 @@ export default {
 		{
 			ObjectId: 211,
 			title: "Popravak štete",
-			type: "one-time",
 			date: "2022-06-01",
 			items: [
 				{
 					ObjectId: 111,
 					name: "Ofarbati zidove",
+					position: 0,
 					completed: true
 				},
 				{
 					ObjectId: 112,
 					name: "Zamijeniti razbijene čaše",
+					position: 1,
 					completed: true
 				}
 			],
 			completed: true
 		}
-	]
+	],
+	Analytics: {
+		ObjectId: 1111,
+		numberOfAccomodations: 3,
+		numberOfReservations: {
+			year2020: 5,
+			year2021: 8,
+			year2022: 7,
+		},
+		numberOfGuests: {
+			year2020: 15,
+			year2021: 38,
+			year2022: 27,
+		},
+		earningsInEur: {
+			year2020: {
+				monthJune: 1500,
+				monthJuly: 2500,
+				monthAugust: 2000
+			},
+			year2021: {
+				monthJune: 1000,
+				monthJuly: 1200,
+				monthAugust: 1250,
+				monthSeptember: 120
+			},
+			year2022: {
+				monthMay: 500,
+				monthJune: 1000,
+				monthJuly: 1000,
+				monthAugust: 1400
+			}
+		}
+	}
 };
