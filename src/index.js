@@ -57,35 +57,35 @@ app.post('/privateaccomodations', (req, res) => {
 });
 
 
-// route or path: /privateaccomodations/:id
+// route or path: /privateaccomodation/:id
 
 // get one private accomodation
-app.get('/privateaccomodations/:id', (req, res) => {
+app.get('/privateaccomodation/:id', (req, res) => {
 	let privateAccomodationId = req.params.id;
 	let privateAccomodation = storage.PrivateAccomodation.filter(item => item.ObjectId == privateAccomodationId)[0];
 	res.send(privateAccomodation);
 });
 
 // delete one private accomodation
-app.delete('/privateaccomodations/:id', (req, res) => {
+app.delete('/privateaccomodation/:id', (req, res) => {
 	let privateAccomodationId = req.params.id;
 	res.statusCode = 204;
-	res.setHeader('Location', '/privateaccomodations/' + privateAccomodationId);
+	res.setHeader('Location', '/privateaccomodation/' + privateAccomodationId);
 	res.send();
 });
 
 // update one private accomodation using patch
-app.patch('/privateaccomodations/:id', (req, res) => {
+app.patch('/privateaccomodation/:id', (req, res) => {
 	let privateAccomodationId = req.params.id;
 	let data = req.body;
 	console.log(data);
 	res.statusCode = 200;
-	res.setHeader('Location', '/privateaccomodations/' + privateAccomodationId);
+	res.setHeader('Location', '/privateaccomodation/' + privateAccomodationId);
 	res.send();
 });
 
 // update one private accomodation using put
-app.put('/privateaccomodations/:id', (req, res) => {
+app.put('/privateaccomodation/:id', (req, res) => {
 	let privateAccomodationId = req.params.id;
 	let data = req.body;
 	if (
@@ -98,15 +98,15 @@ app.put('/privateaccomodations/:id', (req, res) => {
 	}
 	console.log(data);
 	res.statusCode = 200;
-	res.setHeader('Location', '/privateaccomodations/' + privateAccomodationId);
+	res.setHeader('Location', '/privateaccomodation/' + privateAccomodationId);
 	res.send();
 });
 
 
-// route or path: /privateaccomodations/:id/address
+// route or path: /privateaccomodation/:id/address
 
 // get address of one private accomodation
-app.get('/privateaccomodations/:id/address', (req, res) => {
+app.get('/privateaccomodation/:id/address', (req, res) => {
 	let privateAccomodationId = req.params.id;
 	let privateAccomodation = storage.PrivateAccomodation.filter(item => item.ObjectId == privateAccomodationId)[0];
 	let addressId = privateAccomodation.location;
@@ -136,35 +136,35 @@ app.post('/addresses', (req, res) => {
 });
 
 
-// route or path: /addresses/:id
+// route or path: /address/:id
 
 // get one address
-app.get('/addresses/:id', (req, res) => {
+app.get('/address/:id', (req, res) => {
 	let addressId = req.params.id;
 	let address = storage.Address.filter(item => item.ObjectId == addressId)[0];
 	res.send(address);
 });
 
 // delete one address
-app.delete('/addresses/:id', (req, res) => {
+app.delete('/address/:id', (req, res) => {
 	let addressId = req.params.id;
 	res.statusCode = 204;
-	res.setHeader('Location', '/addresses/' + addressId);
+	res.setHeader('Location', '/address/' + addressId);
 	res.send();
 });
 
 // update one address using patch
-app.patch('/addresses/:id', (req, res) => {
+app.patch('/address/:id', (req, res) => {
 	let addressId = req.params.id;
 	let data = req.body;
 	console.log(data);
 	res.statusCode = 200;
-	res.setHeader('Location', '/addresses/' + addressId);
+	res.setHeader('Location', '/address/' + addressId);
 	res.send();
 });
 
 // update one address using put
-app.put('/addresses/:id', (req, res) => {
+app.put('/address/:id', (req, res) => {
 	let addressId = req.params.id;
 	let data = req.body;
 	if (
@@ -176,7 +176,7 @@ app.put('/addresses/:id', (req, res) => {
 	}
 	console.log(data);
 	res.statusCode = 200;
-	res.setHeader('Location', '/addresses/' + addressId);
+	res.setHeader('Location', '/address/' + addressId);
 	res.send();
 });
 
@@ -202,35 +202,35 @@ app.post('/reservations', (req, res) => {
 });
 
 
-// route or path: /reservations/:id
+// route or path: /reservation/:id
 
 // get one reservation
-app.get('/reservations/:id', (req, res) => {
+app.get('/reservation/:id', (req, res) => {
 	let reservationId = req.params.id;
 	let reservation = storage.Reservation.filter(item => item.ObjectId == reservationId)[0];
 	res.send(reservation);
 });
 
 // delete one reservation
-app.delete('/reservations/:id', (req, res) => {
+app.delete('/reservation/:id', (req, res) => {
 	let reservationId = req.params.id;
 	res.statusCode = 204;
-	res.setHeader('Location', '/reservations/' + reservationId);
+	res.setHeader('Location', '/reservation/' + reservationId);
 	res.send();
 });
 
 // update one reservation using patch
-app.patch('/reservations/:id', (req, res) => {
+app.patch('/reservation/:id', (req, res) => {
 	let reservationId = req.params.id;
 	let data = req.body;
 	console.log(data);
 	res.statusCode = 200;
-	res.setHeader('Location', '/reservations/' + reservationId);
+	res.setHeader('Location', '/reservation/' + reservationId);
 	res.send();
 });
 
 // update one reservation using put
-app.put('/reservations/:id', (req, res) => {
+app.put('/reservation/:id', (req, res) => {
 	let reservationId = req.params.id;
 	let data = req.body;
 	if (
@@ -243,15 +243,15 @@ app.put('/reservations/:id', (req, res) => {
 	}
 	console.log(data);
 	res.statusCode = 200;
-	res.setHeader('Location', '/reservations/' + reservationId);
+	res.setHeader('Location', '/reservation/' + reservationId);
 	res.send();
 });
 
 
-// route or path: /reservations/:id/guests
+// route or path: /reservation/:id/guests
 
 // get price of one reservation
-app.get('/reservations/:id/guests', (req, res) => {
+app.get('/reservation/:id/guests', (req, res) => {
 	let reservationId = req.params.id;
 	let reservation = storage.Reservation.filter(item => item.ObjectId == reservationId)[0];
 	let guestIds = reservation.guests;
@@ -285,35 +285,35 @@ app.post('/periods', (req, res) => {
 });
 
 
-// route or path: /periods/:id
+// route or path: /period/:id
 
 // get one period
-app.get('/periods/:id', (req, res) => {
+app.get('/period/:id', (req, res) => {
 	let periodId = req.params.id;
 	let period = storage.Period.filter(item => item.ObjectId == periodId)[0];
 	res.send(period);
 });
 
 // delete one period
-app.delete('/periods/:id', (req, res) => {
+app.delete('/period/:id', (req, res) => {
 	let periodId = req.params.id;
 	res.statusCode = 204;
-	res.setHeader('Location', '/periods/' + periodId);
+	res.setHeader('Location', '/period/' + periodId);
 	res.send();
 });
 
 // update one period using patch
-app.patch('/periods/:id', (req, res) => {
+app.patch('/period/:id', (req, res) => {
 	let periodId = req.params.id;
 	let data = req.body;
 	console.log(data);
 	res.statusCode = 200;
-	res.setHeader('Location', '/periods/' + periodId);
+	res.setHeader('Location', '/period/' + periodId);
 	res.send();
 });
 
 // update one period using put
-app.put('/periods/:id', (req, res) => {
+app.put('/period/:id', (req, res) => {
 	let periodId = req.params.id;
 	let data = req.body;
 	if (
@@ -324,7 +324,7 @@ app.put('/periods/:id', (req, res) => {
 	}
 	console.log(data);
 	res.statusCode = 200;
-	res.setHeader('Location', '/periods/' + periodId);
+	res.setHeader('Location', '/period/' + periodId);
 	res.send();
 });
 
@@ -350,35 +350,35 @@ app.post('/guests', (req, res) => {
 });
 
 
-// route or path: /guests/:id
+// route or path: /guest/:id
 
 // get one guest
-app.get('/guests/:id', (req, res) => {
+app.get('/guest/:id', (req, res) => {
 	let guestId = req.params.id;
 	let guest = storage.Guest.filter(item => item.ObjectId == guestId)[0];
 	res.send(guest);
 });
 
 // delete one guest
-app.delete('/guests/:id', (req, res) => {
+app.delete('/guest/:id', (req, res) => {
 	let guestId = req.params.id;
 	res.statusCode = 204;
-	res.setHeader('Location', '/guests/' + guestId);
+	res.setHeader('Location', '/guest/' + guestId);
 	res.send();
 });
 
 // update one guest using patch
-app.patch('/guests/:id', (req, res) => {
+app.patch('/guest/:id', (req, res) => {
 	let guestId = req.params.id;
 	let data = req.body;
 	console.log(data);
 	res.statusCode = 200;
-	res.setHeader('Location', '/guests/' + guestId);
+	res.setHeader('Location', '/guest/' + guestId);
 	res.send();
 });
 
 // update one guest using put
-app.put('/guests/:id', (req, res) => {
+app.put('/guest/:id', (req, res) => {
 	let guestId = req.params.id;
 	let data = req.body;
 	if (
@@ -390,7 +390,7 @@ app.put('/guests/:id', (req, res) => {
 	}
 	console.log(data);
 	res.statusCode = 200;
-	res.setHeader('Location', '/guests/' + guestId);
+	res.setHeader('Location', '/guest/' + guestId);
 	res.send();
 });
 
@@ -416,35 +416,35 @@ app.post('/notes', (req, res) => {
 });
 
 
-// route or path: /notes/:id
+// route or path: /note/:id
 
 // get one note
-app.get('/notes/:id', (req, res) => {
+app.get('/note/:id', (req, res) => {
 	let noteId = req.params.id;
 	let note = storage.Note.filter(item => item.ObjectId == noteId)[0];
 	res.send(note);
 });
 
 // delete one note
-app.delete('/notes/:id', (req, res) => {
+app.delete('/note/:id', (req, res) => {
 	let noteId = req.params.id;
 	res.statusCode = 204;
-	res.setHeader('Location', '/notes/' + noteId);
+	res.setHeader('Location', '/note/' + noteId);
 	res.send();
 });
 
 // update one note using patch
-app.patch('/notes/:id', (req, res) => {
+app.patch('/note/:id', (req, res) => {
 	let noteId = req.params.id;
 	let data = req.body;
 	console.log(data);
 	res.statusCode = 200;
-	res.setHeader('Location', '/notes/' + noteId);
+	res.setHeader('Location', '/note/' + noteId);
 	res.send();
 });
 
 // update one note using put
-app.put('/notes/:id', (req, res) => {
+app.put('/note/:id', (req, res) => {
 	let noteId = req.params.id;
 	let data = req.body;
 	if (
@@ -456,7 +456,7 @@ app.put('/notes/:id', (req, res) => {
 	}
 	console.log(data);
 	res.statusCode = 200;
-	res.setHeader('Location', '/notes/' + noteId);
+	res.setHeader('Location', '/note/' + noteId);
 	res.send();
 });
 
@@ -482,35 +482,35 @@ app.post('/todolists', (req, res) => {
 });
 
 
-// route or path: /todolists/:id
+// route or path: /todolist/:id
 
 // get one to do list
-app.get('/todolists/:id', (req, res) => {
+app.get('/todolist/:id', (req, res) => {
 	let toDoListId = req.params.id;
 	let toDoList = storage.ToDoList.filter(item => item.ObjectId == toDoListId)[0];
 	res.send(toDoList);
 });
 
 // delete one to do list
-app.delete('/todolists/:id', (req, res) => {
+app.delete('/todolist/:id', (req, res) => {
 	let toDoListId = req.params.id;
 	res.statusCode = 204;
-	res.setHeader('Location', '/todolists/' + toDoListId);
+	res.setHeader('Location', '/todolist/' + toDoListId);
 	res.send();
 });
 
 // update one to do list using patch
-app.patch('/todolists/:id', (req, res) => {
+app.patch('/todolist/:id', (req, res) => {
 	let toDoListId = req.params.id;
 	let data = req.body;
 	console.log(data);
 	res.statusCode = 200;
-	res.setHeader('Location', '/todolists/' + toDoListId);
+	res.setHeader('Location', '/todolist/' + toDoListId);
 	res.send();
 });
 
 // update one to do list using put
-app.put('/todolists/:id', (req, res) => {
+app.put('/todolist/:id', (req, res) => {
 	let toDoListId = req.params.id;
 	let data = req.body;
 	if (
@@ -522,7 +522,7 @@ app.put('/todolists/:id', (req, res) => {
 	}
 	console.log(data);
 	res.statusCode = 200;
-	res.setHeader('Location', '/todolists/' + toDoListId);
+	res.setHeader('Location', '/todolist/' + toDoListId);
 	res.send();
 });
 
