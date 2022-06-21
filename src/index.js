@@ -52,8 +52,12 @@ app.get('/user/current', async (req, res) => {
 // route or path: /privateaccomodations
 
 // get all private accomodations
-app.get('/privateaccomodations', (req, res) => {
-	res.send(storage.PrivateAccomodation);
+app.get('/privateaccomodations', async (req, res) => {
+	let db = await connect();
+	let cursor = await db.collection("privateaccomodations").find();
+	let results = await cursor.toArray();
+	res.json(results);
+	// res.send(storage.PrivateAccomodation);
 });
 
 // add / insert one private accomodation
@@ -131,8 +135,12 @@ app.get('/privateaccomodation/:id/address', (req, res) => {
 // route or path: /addresses
 
 // get all addresses
-app.get('/addresses', (req, res) => {
-	res.send(storage.Address);
+app.get('/addresses', async (req, res) => {
+	let db = await connect();
+	let cursor = await db.collection("addresses").find();
+	let results = await cursor.toArray();
+	res.json(results);
+	// res.send(storage.Address);
 });
 
 // add / insert one address
@@ -197,8 +205,12 @@ app.put('/address/:id', (req, res) => {
 // route or path: /reservations
 
 // get all reservations
-app.get('/reservations', (req, res) => {
-	res.send(storage.Reservation);
+app.get('/reservations', async (req, res) => {
+	let db = await connect();
+	let cursor = await db.collection("reservations").find();
+	let results = await cursor.toArray();
+	res.json(results);
+	// res.send(storage.Reservation);
 });
 
 // add / insert one reservation
@@ -280,8 +292,12 @@ app.get('/reservation/:id/guests', (req, res) => {
 // route or path: /periods
 
 // get all periods
-app.get('/periods', (req, res) => {
-	res.send(storage.Period);
+app.get('/periods', async (req, res) => {
+	let db = await connect();
+	let cursor = await db.collection("periods").find();
+	let results = await cursor.toArray();
+	res.json(results);
+	// res.send(storage.Period);
 });
 
 // add / insert one period
@@ -345,8 +361,12 @@ app.put('/period/:id', (req, res) => {
 // route or path: /guests
 
 // get all guests
-app.get('/guests', (req, res) => {
-	res.send(storage.Guest);
+app.get('/guests', async (req, res) => {
+	let db = await connect();
+	let cursor = await db.collection("guests").find();
+	let results = await cursor.toArray();
+	res.json(results);
+	// res.send(storage.Guest);
 });
 
 // add / insert one guest
@@ -411,8 +431,12 @@ app.put('/guest/:id', (req, res) => {
 // route or path: /notes
 
 // get all notes
-app.get('/notes', (req, res) => {
-	res.send(storage.Note);
+app.get('/notes', async (req, res) => {
+	let db = await connect();
+	let cursor = await db.collection("notes").find();
+	let results = await cursor.toArray();
+	res.json(results);
+	// res.send(storage.Note);
 });
 
 // add / insert one note
@@ -477,8 +501,12 @@ app.put('/note/:id', (req, res) => {
 // route or path: /todolists
 
 // get all to do lists
-app.get('/todolists', (req, res) => {
-	res.send(storage.ToDoList);
+app.get('/todolists', async (req, res) => {
+	let db = await connect();
+	let cursor = await db.collection("todolists").find();
+	let results = await cursor.toArray();
+	res.json(results);
+	// res.send(storage.ToDoList);
 });
 
 // add / insert one to do list
@@ -543,7 +571,11 @@ app.put('/todolist/:id', (req, res) => {
 // route or path: /analytics
 
 // get analytics
-app.get('/analytics', (req, res) => {
+app.get('/analytics', (req, res) => { // async
+	/*let db = await connect();
+	let cursor = await db.collection("analytics").find();
+	let results = await cursor.toArray();
+	res.json(results);*/
 	res.send(storage.Analytics);
 });
 

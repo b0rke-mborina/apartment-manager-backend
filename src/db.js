@@ -20,7 +20,7 @@ export default async () => {
 	if (!db || !isConnected()) {
 		await client.connect();
 		db = client.db("apartment-manager");
-		console.log("apartment-manager OK");
+		// console.log("apartment-manager OK");
 	}
 	return db;
 }
