@@ -1,9 +1,17 @@
-import express from 'express';
+import dotenv, { config } from "dotenv";
+dotenv.config();
+
+import express, { json } from 'express';
+import cors from 'cors';
+// import mongo from 'mongodb';
+
+import connect from './db.js';
 import storage from './storage.js'
 
 const app = express();
 const port = 3000;
 
+app.use(cors());
 app.use(express.json());
 
 
@@ -31,7 +39,8 @@ app.get('/', (req, res) => {
 // route or path: /user/current
 
 // get current user
-app.get('/user/current', (req, res) => {
+app.get('/user/current', async (req, res) => {
+	let db = await connect();
 	res.send(storage.User[0]);
 });
 
