@@ -353,10 +353,12 @@ app.post('/periods', (req, res) => {
 // route or path: /period/:id
 
 // get one period
-app.get('/period/:id', (req, res) => {
+app.get('/period/:id', async (req, res) => {
 	let periodId = req.params.id;
-	let period = storage.Period.filter(item => item.ObjectId == periodId)[0];
-	res.send(period);
+	let db = await connect();
+	let period = await db.collection("periods").findOne({ _id: mongo.ObjectId(periodId) });
+	console.log(period);
+	res.json(period);
 });
 
 // delete one period
@@ -537,10 +539,12 @@ app.post('/notes', (req, res) => {
 // route or path: /note/:id
 
 // get one note
-app.get('/note/:id', (req, res) => {
+app.get('/note/:id', async (req, res) => {
 	let noteId = req.params.id;
-	let note = storage.Note.filter(item => item.ObjectId == noteId)[0];
-	res.send(note);
+	let db = await connect();
+	let note = await db.collection("notes").findOne({ _id: mongo.ObjectId(noteId) });
+	console.log(note);
+	res.json(note);
 });
 
 // delete one note
@@ -607,10 +611,12 @@ app.post('/todolists', (req, res) => {
 // route or path: /todolist/:id
 
 // get one to do list
-app.get('/todolist/:id', (req, res) => {
+app.get('/todolist/:id', async (req, res) => {
 	let toDoListId = req.params.id;
-	let toDoList = storage.ToDoList.filter(item => item.ObjectId == toDoListId)[0];
-	res.send(toDoList);
+	let db = await connect();
+	let toDoList = await db.collection("todolists").findOne({ _id: mongo.ObjectId(toDoListId) });
+	console.log(toDoList);
+	res.json(toDoList);
 });
 
 // delete one to do list
