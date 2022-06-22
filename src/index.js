@@ -1,7 +1,7 @@
 import dotenv, { config } from "dotenv";
 dotenv.config();
 
-import express, { json } from 'express';
+import express, { json, query } from 'express';
 import cors from 'cors';
 import mongo from 'mongodb';
 
@@ -53,26 +53,42 @@ app.get('/user/current', async (req, res) => {
 
 // get all private accomodations
 app.get('/privateaccomodations', async (req, res) => {
+	let selection = {};
+	if (req.query.limit) req.query.limit = Number(req.query.limit);
+	console.log(selection);
 	let db = await connect();
-	let cursor = await db.collection("privateaccomodations").find();
+
+	let cursor = await db.collection("privateaccomodations").find(selection);
+	if (req.query.limit) cursor = cursor.limit(req.query.limit);
 	let results = await cursor.toArray();
 	let accomodations = results.map(async accomodation => {
 		let address = await db.collection("addresses").findOne({ _id: mongo.ObjectId(accomodation.location) });
 		accomodation.location = address;
-		// FIX / to-do: regulate current state
+		// console.log(accomodation);
+		return accomodation;
+	});
+	accomodations = await Promise.all(accomodations);
+
+	const current = new Date();
+	const date = `${current.getFullYear()}-${current.getMonth()+1}-${current.getDate()}`;
+	accomodations = results.map(async accomodation => {
+		let period = await db.collection("periods")
+			.findOne({ privateAccomodationObjectId: mongo.ObjectId(accomodation._id), start: { $lte : date }, end: { $gte : date } }); // Manually?
+		if (!period) {
+			accomodation.currentState = "AVAILABLE";
+		} else {
+			let reservation = await db.collection("reservations").findOne({ period: mongo.ObjectId(period._id) });
+			if (reservation.currentState === "CONFIRMED") {
+				accomodation.currentState = "OCCUPIED";
+			} else {
+				accomodation.currentState = "PENDING";
+			}
+		}
 		console.log(accomodation);
 		return accomodation;
 	});
-
-	/*accomodations = results.map(async accomodation => {
-		let period = await db.collection("periods").findOne({ privateAccomodationObjectId: mongo.ObjectId(accomodation._id) });
-		accomodation.location = address;
-		// FIX / to-do: regulate current state
-		console.log(accomodation);
-		return accomodation;
-	});*/
-
 	accomodations = await Promise.all(accomodations);
+
 	res.json(accomodations);
 });
 
@@ -248,9 +264,21 @@ app.get('/reservations', async (req, res) => {
 		return reservation;
 	});
 	reservations = await Promise.all(reservations);
+	
+	if (req.query.upcoming === "true") {
+		const current = new Date();
+		const date = `${current.getFullYear()}-${current.getMonth()+1}-${current.getDate()}`;
+		console.log(date);
+		reservations = reservations.filter(reservation => Date.parse(reservation.period.start.split(" ")[0]) > Date.parse(date));
+	}
+	if (req.query.limit) {
+		req.query.limit = Number(req.query.limit);
+		reservations = reservations.sort((first, second) => first.period.start - second.period.start) // NEEDS TESTING
+			.slice(0, req.query.limit);
+	}
+
 	console.log(reservations);
-	res.json(results);
-	// res.send(storage.Reservation);
+	res.json(reservations);
 });
 
 // add / insert one reservation
@@ -417,12 +445,12 @@ app.put('/period/:id', (req, res) => {
 
 // get all guests
 app.get('/guests', async (req, res) => {
+	if (req.query.limit) req.query.limit = Number(req.query.limit);
 	let db = await connect();
 	let cursor = await db.collection("guests").find();
+	if (req.query.limit) cursor = cursor.limit(req.query.limit);
 	let results = await cursor.toArray();
 	// res.json(results);
-
-	// FIX / to-do: regulate guest state in DB
 
 	let guests = results.map(async guest => {
 		let reservation = await db.collection("reservations")
@@ -465,6 +493,9 @@ app.get('/guests', async (req, res) => {
 		}
 		return guest;
 	});
+
+	// TO-DO limit
+
 	guests = await Promise.all(guests);
 	console.log(guests);
 	res.json(guests);
@@ -557,11 +588,14 @@ app.put('/guest/:id', (req, res) => {
 
 // get all notes
 app.get('/notes', async (req, res) => {
+	let selection = {};
+	console.log(req.query.important);
+	if (req.query.important === "true") selection["important"] = true;
+	console.log(selection);
 	let db = await connect();
-	let cursor = await db.collection("notes").find();
+	let cursor = await db.collection("notes").find(selection);
 	let results = await cursor.toArray();
 	res.json(results);
-	// res.send(storage.Note);
 });
 
 // add / insert one note
@@ -629,11 +663,14 @@ app.put('/note/:id', (req, res) => {
 
 // get all to do lists
 app.get('/todolists', async (req, res) => {
+	let selection = {};
+	console.log(req.query.completed);
+	if (req.query.completed === "false") selection["completed"] = false;
+	console.log(selection);
 	let db = await connect();
-	let cursor = await db.collection("todolists").find();
+	let cursor = await db.collection("todolists").find(selection);
 	let results = await cursor.toArray();
 	res.json(results);
-	// res.send(storage.ToDoList);
 });
 
 // add / insert one to do list
