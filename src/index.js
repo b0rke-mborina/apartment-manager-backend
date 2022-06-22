@@ -266,10 +266,23 @@ app.post('/reservations', (req, res) => {
 // route or path: /reservation/:id
 
 // get one reservation
-app.get('/reservation/:id', (req, res) => {
+app.get('/reservation/:id', async (req, res) => {
 	let reservationId = req.params.id;
-	let reservation = storage.Reservation.filter(item => item.ObjectId == reservationId)[0];
-	res.send(reservation);
+	let db = await connect();
+
+	let reservation = await db.collection("reservations").findOne({ _id: mongo.ObjectId(reservationId) });
+	let period = await db.collection("periods").findOne({ _id: mongo.ObjectId(reservation.period) });
+	reservation.period = period;
+	let guestWhoBooked = await db.collection("guests").findOne({ _id: mongo.ObjectId(reservation.madeByGuest) });
+	reservation.madeByGuest = guestWhoBooked;
+	let guestsFromDb = reservation.guests.map(async guest => {
+		let guestFromDB = await db.collection("guests").findOne({ _id: mongo.ObjectId(guest) });
+		return guestFromDB;
+	});
+	reservation.guests = await Promise.all(guestsFromDb);
+	console.log(reservation.guests);
+
+	res.json(reservation);
 });
 
 // delete one reservation
@@ -418,12 +431,16 @@ app.get('/guests', async (req, res) => {
 		guest["newestPeriod"] = reservation;
 		if (!guest.newestPeriod) {
 			guest.guestState = "NOT A GUEST YET";
-		} else if (guest.newestPeriod.currentState === "CANCELLED" ) {
-			guest.guestState = "CANCELLED GUEST";
-		} else if (guest.newestPeriod.currentState === "PENDING" ) {
-			guest.guestState = "POSSIBLE GUEST";
-		} else if (guest.newestPeriod.currentState === "INQUIRY" ) {
-			guest.guestState = "POTENTIAL GUEST";
+		} else {
+			if (guest.newestPeriod.currentState === "CANCELLED" ) {
+				guest.guestState = "CANCELLED GUEST";
+			} else if (guest.newestPeriod.currentState === "PENDING" ) {
+				guest.guestState = "POSSIBLE GUEST";
+			} else if (guest.newestPeriod.currentState === "INQUIRY" ) {
+				guest.guestState = "POTENTIAL GUEST";
+			} else if (guest.newestPeriod.currentState === "CONFIRMED" ) {
+				guest.guestState = "CONFIRMED GUEST";
+			}
 		}
 		return guest;
 	});
@@ -434,9 +451,6 @@ app.get('/guests', async (req, res) => {
 			let period = await db.collection("periods").findOne({ _id: mongo.ObjectId(guest.newestPeriod.period) });
 			// console.log(period);
 			guest["newestPeriod"] = period;
-			if (guest.newestPeriod) {
-				guest.guestState = "CONFIRMED GUEST";
-			}
 		}
 		return guest;
 	});
@@ -469,10 +483,34 @@ app.post('/guests', (req, res) => {
 // route or path: /guest/:id
 
 // get one guest
-app.get('/guest/:id', (req, res) => {
+app.get('/guest/:id', async (req, res) => {
 	let guestId = req.params.id;
-	let guest = storage.Guest.filter(item => item.ObjectId == guestId)[0];
-	res.send(guest);
+	let db = await connect();
+
+	let guest = await db.collection("guests").findOne({ _id: mongo.ObjectId(guestId) });
+	let reservation = await db.collection("reservations")
+			.findOne({ $or: [ { madeByGuest: mongo.ObjectId(guest._id) }, { guests: { $in: [mongo.ObjectId(guest._id) ] } } ] });
+	guest["newestPeriod"] = reservation;
+	if (!guest.newestPeriod) {
+		guest.guestState = "NOT A GUEST YET";
+	} else {
+		if (guest.newestPeriod.currentState === "CANCELLED" ) {
+			guest.guestState = "CANCELLED GUEST";
+		} else if (guest.newestPeriod.currentState === "PENDING" ) {
+			guest.guestState = "POSSIBLE GUEST";
+		} else if (guest.newestPeriod.currentState === "INQUIRY" ) {
+			guest.guestState = "POTENTIAL GUEST";
+		} else if (guest.newestPeriod.currentState === "CONFIRMED" ) {
+			guest.guestState = "CONFIRMED GUEST";
+		}
+		let period = await db.collection("periods").findOne({ _id: mongo.ObjectId(reservation.period) });
+		guest.newestPeriod = period;
+		let privateAccomodation = await db.collection("privateaccomodations")
+			.findOne({ _id: mongo.ObjectId(guest.newestPeriod.privateAccomodationObjectId) });
+		guest.newestPeriod["privateAccomodation"] = privateAccomodation;
+	}	
+
+	res.json(guest);
 });
 
 // delete one guest
