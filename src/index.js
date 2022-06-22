@@ -3,7 +3,7 @@ dotenv.config();
 
 import express, { json } from 'express';
 import cors from 'cors';
-// import mongo from 'mongodb';
+import mongo from 'mongodb';
 
 import connect from './db.js';
 import storage from './storage.js'
@@ -56,8 +56,24 @@ app.get('/privateaccomodations', async (req, res) => {
 	let db = await connect();
 	let cursor = await db.collection("privateaccomodations").find();
 	let results = await cursor.toArray();
-	res.json(results);
-	// res.send(storage.PrivateAccomodation);
+	let accomodations = results.map(async accomodation => {
+		let address = await db.collection("addresses").findOne({ _id: mongo.ObjectId(accomodation.location) });
+		accomodation.location = address;
+		// FIX / to-do: regulate current state
+		console.log(accomodation);
+		return accomodation;
+	});
+
+	/*accomodations = results.map(async accomodation => {
+		let period = await db.collection("periods").findOne({ privateAccomodationObjectId: mongo.ObjectId(accomodation._id) });
+		accomodation.location = address;
+		// FIX / to-do: regulate current state
+		console.log(accomodation);
+		return accomodation;
+	});*/
+
+	accomodations = await Promise.all(accomodations);
+	res.json(accomodations);
 });
 
 // add / insert one private accomodation
@@ -73,10 +89,15 @@ app.post('/privateaccomodations', (req, res) => {
 // route or path: /privateaccomodation/:id
 
 // get one private accomodation
-app.get('/privateaccomodation/:id', (req, res) => {
+app.get('/privateaccomodation/:id', async (req, res) => {
 	let privateAccomodationId = req.params.id;
-	let privateAccomodation = storage.PrivateAccomodation.filter(item => item.ObjectId == privateAccomodationId)[0];
-	res.send(privateAccomodation);
+	let db = await connect();
+
+	let privateAccomodation = await db.collection("privateaccomodations").findOne({ _id: mongo.ObjectId(privateAccomodationId) });
+	let address = await db.collection("addresses").findOne({ _id: mongo.ObjectId(privateAccomodation.location) });
+	privateAccomodation.location = address;
+
+	res.json(privateAccomodation);
 });
 
 // delete one private accomodation
@@ -209,6 +230,25 @@ app.get('/reservations', async (req, res) => {
 	let db = await connect();
 	let cursor = await db.collection("reservations").find();
 	let results = await cursor.toArray();
+	let reservations = results.map(async reservation => {
+		let periodAndMainGuest = await Promise.all([
+			await db.collection("guests").findOne({ _id: mongo.ObjectId(reservation.madeByGuest) }),
+			await db.collection("periods").findOne({ _id: mongo.ObjectId(reservation.period) })
+		]);
+		reservation.madeByGuest = periodAndMainGuest[0];
+		reservation.period = periodAndMainGuest[1];
+		// console.log("guests");
+		// FIX / to-do: add all guests to reservation
+		// console.log(reservation.guests);
+		/*reservation.guests = reservation.guests.map(async guest => {
+			let reservationGuest = await db.collection("guests").findOne({ _id: guest });
+			return reservationGuest;
+		});*/
+		console.log(reservation);
+		return reservation;
+	});
+	reservations = await Promise.all(reservations);
+	console.log(reservations);
 	res.json(results);
 	// res.send(storage.Reservation);
 });
@@ -365,8 +405,53 @@ app.get('/guests', async (req, res) => {
 	let db = await connect();
 	let cursor = await db.collection("guests").find();
 	let results = await cursor.toArray();
-	res.json(results);
-	// res.send(storage.Guest);
+	// res.json(results);
+
+	// FIX / to-do: regulate guest state in DB
+
+	let guests = results.map(async guest => {
+		let reservation = await db.collection("reservations")
+			.findOne({ $or: [ { madeByGuest: mongo.ObjectId(guest._id) }, { guests: { $in: [mongo.ObjectId(guest._id) ] } } ] });
+		// console.log(reservation);
+		guest["newestPeriod"] = reservation;
+		if (!guest.newestPeriod) {
+			guest.guestState = "NOT A GUEST YET";
+		} else if (guest.newestPeriod.currentState === "CANCELLED" ) {
+			guest.guestState = "CANCELLED GUEST";
+		} else if (guest.newestPeriod.currentState === "PENDING" ) {
+			guest.guestState = "POSSIBLE GUEST";
+		} else if (guest.newestPeriod.currentState === "INQUIRY" ) {
+			guest.guestState = "POTENTIAL GUEST";
+		}
+		return guest;
+	});
+	guests = await Promise.all(guests);
+
+	guests = results.map(async guest => {
+		if (guest.newestPeriod) {
+			let period = await db.collection("periods").findOne({ _id: mongo.ObjectId(guest.newestPeriod.period) });
+			// console.log(period);
+			guest["newestPeriod"] = period;
+			if (guest.newestPeriod) {
+				guest.guestState = "CONFIRMED GUEST";
+			}
+		}
+		return guest;
+	});
+	guests = await Promise.all(guests);
+
+	guests = results.map(async guest => {
+		if (guest.newestPeriod) {
+			let privateAccomodation = await db.collection("privateaccomodations")
+				.findOne({ _id: mongo.ObjectId(guest.newestPeriod.privateAccomodationObjectId) });
+			// console.log(privateAccomodation);
+			guest.newestPeriod["privateAccomodation"] = privateAccomodation;
+		}
+		return guest;
+	});
+	guests = await Promise.all(guests);
+	console.log(guests);
+	res.json(guests);
 });
 
 // add / insert one guest
