@@ -93,12 +93,25 @@ app.get('/privateaccomodations', async (req, res) => {
 });
 
 // add / insert one private accomodation
-app.post('/privateaccomodations', (req, res) => {
-	let data = req.body;
-	console.log(data);
-	res.statusCode = 201;
+app.post('/privateaccomodations', async (req, res) => {
+	let db = await connect();
+	let doc = req.body;
+	console.log(doc);
+
+	let result = await db.collection('privateaccomodations').insertOne(doc);
+	if (result.insertedCount == 1) {
+		res.json({
+			status: 'success',
+			_id: result.insertedId,
+		});
+	} else {
+		res.json({
+			status: 'fail',
+		});
+	}
+	/*res.statusCode = 201;
 	res.setHeader('Location', '/privateaccomodations');
-	res.send();
+	res.send();*/
 });
 
 
@@ -173,20 +186,47 @@ app.get('/privateaccomodation/:id/address', (req, res) => {
 
 // get all addresses
 app.get('/addresses', async (req, res) => {
+	let selection = {};
+	if(req.query.street) selection["street"] = req.query.street;
+	// console.log(req.query.street);
+	if(req.query.houseNumber) selection["houseNumber"] = req.query.houseNumber;
+	// console.log(req.query.houseNumber);
+	if(req.query.entranceNumber) selection["entranceNumber"] = req.query.entranceNumber;
+	// console.log(req.query.entranceNumber);
+	if(req.query.postalNumber) selection["postalNumber"] = Number(req.query.postalNumber);
+	// console.log(Number(req.query.postalNumber));
+	if(req.query.city) selection["city"] = req.query.city;
+	// console.log(req.query.city);
+	if(req.query.country) selection["country"] = req.query.country;
+	// console.log(req.query.country);
+	console.log(selection);
 	let db = await connect();
-	let cursor = await db.collection("addresses").find();
+	let cursor = await db.collection("addresses").find(selection);
 	let results = await cursor.toArray();
 	res.json(results);
-	// res.send(storage.Address);
 });
 
 // add / insert one address
-app.post('/addresses', (req, res) => {
-	let data = req.body;
-	console.log(data);
-	res.statusCode = 201;
+app.post('/addresses', async (req, res) => {
+	let db = await connect();
+	let doc = req.body;
+	console.log(doc);
+
+	let result = await db.collection('addresses').insertOne(doc);
+	if (result.insertedCount == 1) {
+		res.json({
+			status: 'success',
+			_id: result.insertedId,
+		});
+	} else {
+		res.json({
+			status: 'fail',
+		});
+	}
+	
+	/*res.statusCode = 201;
 	res.setHeader('Location', '/addresses');
-	res.send();
+	res.send();*/
 });
 
 
@@ -282,12 +322,40 @@ app.get('/reservations', async (req, res) => {
 });
 
 // add / insert one reservation
-app.post('/reservations', (req, res) => {
-	let data = req.body;
-	console.log(data);
-	res.statusCode = 201;
+app.post('/reservations', async (req, res) => {
+	let db = await connect();
+	let doc = req.body;
+	// set valueInEur
+	/*if (doc.price.currency === "EUR") {
+		doc.price.valueInEur = doc.price.value;
+	} else {
+		const currentValueInEur = await fetch(
+			`https://api.apilayer.com/exchangerates_data/convert?to=EUR&from=${doc.price.currency}&amount=${doc.price.value}`,
+			{
+				method: 'GET',
+				redirect: 'follow',
+				headers: {
+					"apikey": process.env.API_LAYER_KEY,
+				}
+			}
+		);
+		doc.price.valueInEur = currentValueInEur.result;
+	}*/
+
+	let result = await db.collection('reservations').insertOne(doc);
+	if (result.insertedCount == 1) {
+		res.json({
+			status: 'success',
+			_id: result.insertedId,
+		});
+	} else {
+		res.json({
+			status: 'fail',
+		});
+	}
+	/*res.statusCode = 201;
 	res.setHeader('Location', '/reservations');
-	res.send();
+	res.send();*/
 });
 
 
@@ -382,12 +450,26 @@ app.get('/periods', async (req, res) => {
 });
 
 // add / insert one period
-app.post('/periods', (req, res) => {
-	let data = req.body;
-	console.log(data);
-	res.statusCode = 201;
+app.post('/periods', async (req, res) => {
+	let db = await connect();
+	let doc = req.body;
+	console.log(doc);
+
+	let result = await db.collection('periods').insertOne(doc);
+	if (result.insertedCount == 1) {
+		res.json({
+			status: 'success',
+			_id: result.insertedId,
+		});
+	} else {
+		res.json({
+			status: 'fail',
+		});
+	}
+
+	/*res.statusCode = 201;
 	res.setHeader('Location', '/periods');
-	res.send();
+	res.send();*/
 });
 
 
@@ -502,12 +584,25 @@ app.get('/guests', async (req, res) => {
 });
 
 // add / insert one guest
-app.post('/guests', (req, res) => {
-	let data = req.body;
-	console.log(data);
-	res.statusCode = 201;
+app.post('/guests', async (req, res) => {
+	let db = await connect();
+	let doc = req.body;
+	console.log(doc);
+
+	let result = await db.collection('guests').insertOne(doc);
+	if (result.insertedCount == 1) {
+		res.json({
+			status: 'success',
+			_id: result.insertedId,
+		});
+	} else {
+		res.json({
+			status: 'fail',
+		});
+	}
+	/*res.statusCode = 201;
 	res.setHeader('Location', '/guests');
-	res.send();
+	res.send();*/
 });
 
 
@@ -599,12 +694,25 @@ app.get('/notes', async (req, res) => {
 });
 
 // add / insert one note
-app.post('/notes', (req, res) => {
-	let data = req.body;
-	console.log(data);
-	res.statusCode = 201;
+app.post('/notes', async (req, res) => {
+	let db = await connect();
+	let doc = req.body;
+	console.log(doc);
+
+	let result = await db.collection('notes').insertOne(doc);
+	if (result.insertedCount == 1) {
+		res.json({
+			status: 'success',
+			_id: result.insertedId,
+		});
+	} else {
+		res.json({
+			status: 'fail',
+		});
+	}
+	/*res.statusCode = 201;
 	res.setHeader('Location', '/notes');
-	res.send();
+	res.send();*/
 });
 
 
@@ -674,12 +782,26 @@ app.get('/todolists', async (req, res) => {
 });
 
 // add / insert one to do list
-app.post('/todolists', (req, res) => {
-	let data = req.body;
-	console.log(data);
-	res.statusCode = 201;
+app.post('/todolists', async (req, res) => {
+	let db = await connect();
+	let doc = req.body;
+	console.log(doc);
+
+	let result = await db.collection('todolists').insertOne(doc);
+	if (result.insertedCount == 1) {
+		res.json({
+			status: 'success',
+			_id: result.insertedId,
+		});
+	} else {
+		res.json({
+			status: 'fail',
+		});
+	}
+
+	/*res.statusCode = 201;
 	res.setHeader('Location', '/todolists');
-	res.send();
+	res.send();*/
 });
 
 
