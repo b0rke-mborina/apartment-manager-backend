@@ -6,7 +6,8 @@ import cors from 'cors';
 import mongo from 'mongodb';
 
 import connect from './db.js';
-import storage from './storage.js'
+import { AxiosServiceExchangeRates } from './services.js';
+import storage from './storage.js';
 
 const app = express();
 const port = 3000;
@@ -20,7 +21,7 @@ app.use(express.json());
 
 // get data
 app.get('/', (req, res) => {
-	let data = {
+	/*let data = {
 		privateAccomodations: storage.PrivateAccomodation
 			.sort((first, second) => first.name - second.name)
 			.slice(0, 3),
@@ -28,7 +29,7 @@ app.get('/', (req, res) => {
 			.sort((first, second) => first.currentState - second.currentState)
 			.slice(0, 3)
 	};
-	res.send([storage.User[0], data]);
+	res.send([storage.User[0], data]);*/
 });
 
 
@@ -109,9 +110,6 @@ app.post('/privateaccomodations', async (req, res) => {
 			status: 'fail',
 		});
 	}
-	/*res.statusCode = 201;
-	res.setHeader('Location', '/privateaccomodations');
-	res.send();*/
 });
 
 
@@ -130,11 +128,36 @@ app.get('/privateaccomodation/:id', async (req, res) => {
 });
 
 // delete one private accomodation
-app.delete('/privateaccomodation/:id', (req, res) => {
+app.delete('/privateaccomodation/:id', async (req, res) => {
+	let db = await connect();
 	let privateAccomodationId = req.params.id;
-	res.statusCode = 204;
-	res.setHeader('Location', '/privateaccomodation/' + privateAccomodationId);
-	res.send();
+	// find accomodation
+	let accomodation = await db.collection("privateaccomodations").findOne({ _id: mongo.ObjectId(privateAccomodationId) });
+	// chack if there is any more accomodations on the same address
+	let accomodationOnSameAddress = await db.collection("privateaccomodations")
+		.findOne({ location: mongo.ObjectId(accomodation.location) });
+	// delete address if needed
+	if (!accomodationOnSameAddress) {
+		let addressResult = await db.collection('addresses').deleteOne({ _id: accomodation.location });
+		if (addressResult.deletedCount == 1) res.statusCode = 201;
+		else {
+			res.statusCode = 500;
+			res.json({ status: 'fail' });
+		}
+	}
+	// delete accomodation
+	let result = await db.collection('privateaccomodations').deleteOne({ _id: mongo.ObjectId(privateAccomodationId) });
+	if (result.deletedCount == 1 && res.statusCode == 201) {
+		res.statusCode = 201;
+		res.json({
+			status: 'success'
+		});
+	} else {
+		res.statusCode = 500;
+		res.json({
+			status: 'fail',
+		});
+	}
 });
 
 // update one private accomodation using patch
@@ -223,10 +246,6 @@ app.post('/addresses', async (req, res) => {
 			status: 'fail',
 		});
 	}
-	
-	/*res.statusCode = 201;
-	res.setHeader('Location', '/addresses');
-	res.send();*/
 });
 
 
@@ -313,8 +332,8 @@ app.get('/reservations', async (req, res) => {
 	}
 	if (req.query.limit) {
 		req.query.limit = Number(req.query.limit);
-		reservations = reservations.sort((first, second) => first.period.start - second.period.start) // NEEDS TESTING
-			.slice(0, req.query.limit);
+		// reservations = reservations.sort((first, second) => first.period.start - second.period.start) // NEEDS TESTING
+			// .slice(0, req.query.limit);
 	}
 
 	console.log(reservations);
@@ -326,21 +345,22 @@ app.post('/reservations', async (req, res) => {
 	let db = await connect();
 	let doc = req.body;
 	// set valueInEur
-	/*if (doc.price.currency === "EUR") {
+	if (doc.price.currency === "EUR") {
 		doc.price.valueInEur = doc.price.value;
 	} else {
-		const currentValueInEur = await fetch(
-			`https://api.apilayer.com/exchangerates_data/convert?to=EUR&from=${doc.price.currency}&amount=${doc.price.value}`,
+		const currentValueInEur = await AxiosServiceExchangeRates.get(
+			`/convert?to=EUR&from=${doc.price.currency}&amount=${doc.price.value}`,
 			{
-				method: 'GET',
 				redirect: 'follow',
 				headers: {
 					"apikey": process.env.API_LAYER_KEY,
 				}
 			}
 		);
-		doc.price.valueInEur = currentValueInEur.result;
-	}*/
+		// console.log("currentValueInEur");
+		// console.log(currentValueInEur.data.result);
+		doc.price.valueInEur = currentValueInEur.data.result;
+	}
 
 	let result = await db.collection('reservations').insertOne(doc);
 	if (result.insertedCount == 1) {
@@ -353,9 +373,6 @@ app.post('/reservations', async (req, res) => {
 			status: 'fail',
 		});
 	}
-	/*res.statusCode = 201;
-	res.setHeader('Location', '/reservations');
-	res.send();*/
 });
 
 
@@ -382,11 +399,29 @@ app.get('/reservation/:id', async (req, res) => {
 });
 
 // delete one reservation
-app.delete('/reservation/:id', (req, res) => {
+app.delete('/reservation/:id', async (req, res) => {
+	let db = await connect();
 	let reservationId = req.params.id;
-	res.statusCode = 204;
-	res.setHeader('Location', '/reservation/' + reservationId);
-	res.send();
+	// delete belonging period
+	let periodId = await db.collection('reservations').findOne({ _id: mongo.ObjectId(reservationId) }).period;
+	let periodResult = await db.collection('periods').deleteOne({ _id: mongo.ObjectId(periodId) });
+	if (periodResult.deletedCount == 1) res.statusCode = 201;
+	else {
+		res.statusCode = 500;
+		res.json({ status: 'fail' });
+	}
+	// delete reservation
+	let result = await db.collection('reservations').deleteOne({ _id: mongo.ObjectId(reservationId) });
+	if (result.deletedCount == 1) {
+		res.json({
+			status: 'success'
+		});
+	} else {
+		res.statusCode = 500;
+		res.json({
+			status: 'fail',
+		});
+	}
 });
 
 // update one reservation using patch
@@ -466,10 +501,6 @@ app.post('/periods', async (req, res) => {
 			status: 'fail',
 		});
 	}
-
-	/*res.statusCode = 201;
-	res.setHeader('Location', '/periods');
-	res.send();*/
 });
 
 
@@ -485,11 +516,32 @@ app.get('/period/:id', async (req, res) => {
 });
 
 // delete one period
-app.delete('/period/:id', (req, res) => {
+app.delete('/period/:id', async (req, res) => {
+	let db = await connect();
 	let periodId = req.params.id;
-	res.statusCode = 204;
-	res.setHeader('Location', '/period/' + periodId);
-	res.send();
+	// if period belongs to reservation, don't delete it
+	let reservation = await db.collection("reservations").findOne({ period: mongo.ObjectId(periodId) });
+	if (reservation) {
+		res.statusCode = 500;
+		res.json({
+			status: 'fail',
+			reason: "You cannot delete this period. It belongs to a reservation."
+		});
+	} else {
+		// delete period
+		let result = await db.collection('periods').deleteOne({ _id: mongo.ObjectId(periodId) });
+		if (result.deletedCount == 1) {
+			res.statusCode = 201;
+			res.json({
+				status: 'success'
+			});
+		} else {
+			res.statusCode = 500;
+			res.json({
+				status: 'fail',
+			});
+		}
+	}
 });
 
 // update one period using patch
@@ -600,9 +652,6 @@ app.post('/guests', async (req, res) => {
 			status: 'fail',
 		});
 	}
-	/*res.statusCode = 201;
-	res.setHeader('Location', '/guests');
-	res.send();*/
 });
 
 
@@ -640,11 +689,41 @@ app.get('/guest/:id', async (req, res) => {
 });
 
 // delete one guest
-app.delete('/guest/:id', (req, res) => {
+app.delete('/guest/:id', async (req, res) => {
+	let db = await connect();
 	let guestId = req.params.id;
-	res.statusCode = 204;
-	res.setHeader('Location', '/guest/' + guestId);
-	res.send();
+	// if period belongs to reservation, don't delete it
+	let reservation = await db.collection("reservations").findOne({
+		$or: [
+			{ madeByGuest: mongo.ObjectId(guestId) },
+			{
+				guests: {
+					$in: [mongo.ObjectId(guestId) ]
+				}
+			}
+		]
+	});
+	if (reservation) {
+		res.statusCode = 500;
+		res.json({
+			status: 'fail',
+			reason: "You cannot delete this guest. It belongs to a reservation."
+		});
+	} else {
+		// delete period
+		let result = await db.collection('guests').deleteOne({ _id: mongo.ObjectId(guestId) });
+		if (result.deletedCount == 1) {
+			res.statusCode = 201;
+			res.json({
+				status: 'success'
+			});
+		} else {
+			res.statusCode = 500;
+			res.json({
+				status: 'fail',
+			});
+		}
+	}
 });
 
 // update one guest using patch
@@ -710,9 +789,6 @@ app.post('/notes', async (req, res) => {
 			status: 'fail',
 		});
 	}
-	/*res.statusCode = 201;
-	res.setHeader('Location', '/notes');
-	res.send();*/
 });
 
 
@@ -728,11 +804,22 @@ app.get('/note/:id', async (req, res) => {
 });
 
 // delete one note
-app.delete('/note/:id', (req, res) => {
+app.delete('/note/:id', async (req, res) => {
+	let db = await connect();
 	let noteId = req.params.id;
-	res.statusCode = 204;
-	res.setHeader('Location', '/note/' + noteId);
-	res.send();
+
+	let result = await db.collection('notes').deleteOne({ _id: mongo.ObjectId(noteId) });
+	if (result.deletedCount == 1) {
+		res.statusCode = 201;
+		res.json({
+			status: 'success'
+		});
+	} else {
+		res.statusCode = 500;
+		res.json({
+			status: 'fail',
+		});
+	}
 });
 
 // update one note using patch
@@ -798,10 +885,6 @@ app.post('/todolists', async (req, res) => {
 			status: 'fail',
 		});
 	}
-
-	/*res.statusCode = 201;
-	res.setHeader('Location', '/todolists');
-	res.send();*/
 });
 
 
@@ -817,11 +900,22 @@ app.get('/todolist/:id', async (req, res) => {
 });
 
 // delete one to do list
-app.delete('/todolist/:id', (req, res) => {
+app.delete('/todolist/:id', async (req, res) => {
+	let db = await connect();
 	let toDoListId = req.params.id;
-	res.statusCode = 204;
-	res.setHeader('Location', '/todolist/' + toDoListId);
-	res.send();
+
+	let result = await db.collection('todolists').deleteOne({ _id: mongo.ObjectId(toDoListId) });
+	if (result.deletedCount == 1) {
+		res.statusCode = 201;
+		res.json({
+			status: 'success'
+		});
+	} else {
+		res.statusCode = 500;
+		res.json({
+			status: 'fail',
+		});
+	}
 });
 
 // update one to do list using patch
