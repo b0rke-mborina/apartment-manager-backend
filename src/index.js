@@ -762,11 +762,13 @@ app.put('/guest/:id', (req, res) => {
 
 // get all notes
 app.get('/notes', async (req, res) => {
+	// generate selection and connect to database
 	let selection = {};
-	console.log(req.query.important);
+	// console.log(req.query.important);
 	if (req.query.important === "true") selection["important"] = true;
-	console.log(selection);
+	// console.log(selection);
 	let db = await connect();
+	// get all documents from database collection and send it
 	let cursor = await db.collection("notes").find(selection);
 	let results = await cursor.toArray();
 	res.json(results);
@@ -774,19 +776,34 @@ app.get('/notes', async (req, res) => {
 
 // add / insert one note
 app.post('/notes', async (req, res) => {
-	let db = await connect();
+	// save data and connect to database
 	let doc = req.body;
 	console.log(doc);
-
-	let result = await db.collection('notes').insertOne(doc);
-	if (result.insertedCount == 1) {
-		res.json({
-			status: 'success',
-			_id: result.insertedId,
-		});
+	let db = await connect();
+	// check data requirements fulfillment
+	const check = Boolean(
+		doc.heading && typeof doc.heading === "string"
+		&& doc.body && typeof doc.body === "string"
+		&& doc.important !== "" && doc.important !== null && doc.important !== undefined && typeof doc.important === "boolean"
+		&& Object.keys(doc).length === 3
+	);
+	if (check) {
+		// save document to database collection and give feedback
+		let result = await db.collection('notes').insertOne(doc);
+		if (result.insertedId !== null) {
+			res.status(201).json({
+				status: 'Note creation successful.',
+				_id: result.insertedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Note creation failed.',
+			});
+		}
 	} else {
-		res.json({
-			status: 'fail',
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
 		});
 	}
 });
@@ -796,57 +813,124 @@ app.post('/notes', async (req, res) => {
 
 // get one note
 app.get('/note/:id', async (req, res) => {
+	// save data and connect to database
 	let noteId = req.params.id;
 	let db = await connect();
+	// get wanted document from database collection and send it
 	let note = await db.collection("notes").findOne({ _id: mongo.ObjectId(noteId) });
-	console.log(note);
+	// console.log(note);
 	res.json(note);
 });
 
 // delete one note
 app.delete('/note/:id', async (req, res) => {
-	let db = await connect();
+	// save data and connect to database
 	let noteId = req.params.id;
-
-	let result = await db.collection('notes').deleteOne({ _id: mongo.ObjectId(noteId) });
-	if (result.deletedCount == 1) {
-		res.statusCode = 201;
-		res.json({
-			status: 'success'
-		});
+	let db = await connect();
+	// check data requirements fulfillment
+	const check = Boolean(
+		noteId && noteId.match(/^[0-9a-fA-F]{24}$/)
+	);
+	if (check) {
+		// delete document from database collection and give feedback
+		let result = await db.collection('notes').deleteOne({ _id: mongo.ObjectId(noteId) });
+		if (result.deletedCount == 1) {
+			res.status(200).json({
+				status: 'Note deletion successful.'
+			});
+		} else {
+			res.status(501).json({
+				status: 'Note deletion failed.',
+			});
+		}
 	} else {
-		res.statusCode = 500;
-		res.json({
-			status: 'fail',
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
 		});
 	}
 });
 
 // update one note using patch
-app.patch('/note/:id', (req, res) => {
+app.patch('/note/:id', async (req, res) => {
+	// save and modify data, connect to database
+	let doc = req.body;
+	delete doc._id;
 	let noteId = req.params.id;
-	let data = req.body;
-	console.log(data);
-	res.statusCode = 200;
-	res.setHeader('Location', '/note/' + noteId);
-	res.send();
+	let db = await connect();
+	// check data requirements fulfillment
+	const allowedAttributes = ["heading", "body", "important"];
+	const check = Boolean(
+		noteId && noteId.match(/^[0-9a-fA-F]{24}$/)
+		&& (
+			(doc.heading && typeof doc.heading === "string")
+			|| (doc.body && typeof doc.body === "string")
+			|| (doc.important !== "" && doc.important !== null && doc.important !== undefined && typeof doc.important === "boolean")
+		)
+		&& (Object.keys(doc).length <= 3 && Object.keys(doc).every(attribute => allowedAttributes.includes(attribute)))
+	);
+	if (check) {
+		// update document in database collection and give feedback
+		let result = await db.collection('notes').updateOne(
+			{ _id: mongo.ObjectId(noteId) },
+			{ $set: doc }
+		);
+		if (result.matchedCount == 1 || result.modifiedCount == 1) {
+			res.status(200).json({
+				status: 'Note updated successfully',
+				id: result.modifiedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Note update failed.',
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 // update one note using put
-app.put('/note/:id', (req, res) => {
+app.put('/note/:id', async (req, res) => {
+	// save and modify data, connect to database
+	let doc = req.body;
+	delete doc._id;
 	let noteId = req.params.id;
-	let data = req.body;
-	if (
-			!data.header || !data.body || data.important==null
-			|| Object.keys(data).length != 4
-		) {
-		res.statusCode = 400;
-		return res.send();
+	let db = await connect();
+	// check data requirements fulfillment
+	const allowedAttributes = ["heading", "body", "important"];
+	const check = Boolean(
+		noteId && noteId.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.heading && typeof doc.heading === "string"
+		&& doc.body && typeof doc.body === "string"
+		&& doc.important !== "" && doc.important !== null && doc.important !== undefined && typeof doc.important === "boolean"
+		&& Object.keys(doc).length === 3 && Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+	);
+	if (check) {
+		// update document in database collection and give feedback
+		let result = await db.collection('notes').updateOne(
+			{ _id: mongo.ObjectId(noteId) },
+			{ $set: doc }
+		);
+		if (result.matchedCount == 1 || result.modifiedCount == 1) {
+			res.status(200).json({
+				status: 'Note updated successfully',
+				id: result.modifiedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Note update failed.',
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
 	}
-	console.log(data);
-	res.statusCode = 200;
-	res.setHeader('Location', '/note/' + noteId);
-	res.send();
 });
 
 
