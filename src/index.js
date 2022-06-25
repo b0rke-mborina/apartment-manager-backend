@@ -766,12 +766,13 @@ app.get('/notes', async (req, res) => {
 	let selection = {};
 	// console.log(req.query.important);
 	if (req.query.important === "true") selection["important"] = true;
+	else if (req.query.important === "false") selection["important"] = false;
 	// console.log(selection);
 	let db = await connect();
 	// get all documents from database collection and send it
 	let cursor = await db.collection("notes").find(selection);
 	let results = await cursor.toArray();
-	res.json(results);
+	res.status(200).json(results);
 });
 
 // add / insert one note
@@ -816,10 +817,18 @@ app.get('/note/:id', async (req, res) => {
 	// save data and connect to database
 	let noteId = req.params.id;
 	let db = await connect();
-	// get wanted document from database collection and send it
-	let note = await db.collection("notes").findOne({ _id: mongo.ObjectId(noteId) });
-	// console.log(note);
-	res.json(note);
+	// check data requirements fulfillment
+	if (noteId && noteId.match(/^[0-9a-fA-F]{24}$/)) {
+		// get wanted document from database collection and send it
+		let note = await db.collection("notes").findOne({ _id: mongo.ObjectId(noteId) });
+		// console.log(note);
+		res.status(200).json(note);
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 // delete one note
@@ -942,14 +951,17 @@ app.put('/note/:id', async (req, res) => {
 
 // get all to do lists
 app.get('/todolists', async (req, res) => {
+	// generate selection and connect to database
 	let selection = {};
-	console.log(req.query.completed);
+	// console.log(req.query.completed);
 	if (req.query.completed === "false") selection["completed"] = false;
-	console.log(selection);
+	else if (req.query.completed === "true") selection["completed"] = true;
+	// console.log(selection);
 	let db = await connect();
+	// get all documents from database collection and send it
 	let cursor = await db.collection("todolists").find(selection);
 	let results = await cursor.toArray();
-	res.json(results);
+	res.status(200).json(results);
 });
 
 // add / insert one to do list
@@ -976,11 +988,21 @@ app.post('/todolists', async (req, res) => {
 
 // get one to do list
 app.get('/todolist/:id', async (req, res) => {
+	// save data and connect to database
 	let toDoListId = req.params.id;
 	let db = await connect();
-	let toDoList = await db.collection("todolists").findOne({ _id: mongo.ObjectId(toDoListId) });
-	console.log(toDoList);
-	res.json(toDoList);
+	// check data requirements fulfillment
+	if (toDoListId && toDoListId.match(/^[0-9a-fA-F]{24}$/)) {
+		// get wanted document from database collection and send it
+		let toDoList = await db.collection("todolists").findOne({ _id: mongo.ObjectId(toDoListId) });
+		// console.log(toDoList);
+		res.status(200).json(toDoList);
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 // delete one to do list
