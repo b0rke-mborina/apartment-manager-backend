@@ -876,7 +876,11 @@ app.patch('/note/:id', async (req, res) => {
 			|| (doc.body && typeof doc.body === "string")
 			|| (doc.important !== "" && doc.important !== null && doc.important !== undefined && typeof doc.important === "boolean")
 		)
-		&& (Object.keys(doc).length <= 3 && Object.keys(doc).every(attribute => allowedAttributes.includes(attribute)))
+		&& (
+			Object.keys(doc).length <= 3
+			&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+			&& Object.values(doc).every(value => value !== "" && value !== null && value !== undefined)
+		)
 	);
 	if (check) {
 		// update document in database collection and give feedback
@@ -884,7 +888,7 @@ app.patch('/note/:id', async (req, res) => {
 			{ _id: mongo.ObjectId(noteId) },
 			{ $set: doc }
 		);
-		if (result.matchedCount == 1 || result.modifiedCount == 1) {
+		if (result.matchedCount == 1 && result.modifiedCount == 1) {
 			res.status(200).json({
 				status: 'Note updated successfully',
 				id: result.modifiedId,
@@ -924,7 +928,7 @@ app.put('/note/:id', async (req, res) => {
 			{ _id: mongo.ObjectId(noteId) },
 			{ $set: doc }
 		);
-		if (result.matchedCount == 1 || result.modifiedCount == 1) {
+		if (result.matchedCount == 1 && result.modifiedCount == 1) {
 			res.status(200).json({
 				status: 'Note updated successfully',
 				id: result.modifiedId,
@@ -966,19 +970,46 @@ app.get('/todolists', async (req, res) => {
 
 // add / insert one to do list
 app.post('/todolists', async (req, res) => {
-	let db = await connect();
+	// save data and connect to database
 	let doc = req.body;
 	console.log(doc);
-
-	let result = await db.collection('todolists').insertOne(doc);
-	if (result.insertedCount == 1) {
-		res.json({
-			status: 'success',
-			_id: result.insertedId,
-		});
+	let db = await connect();
+	// check data requirements fulfillment
+	const check = Boolean(
+		doc.title && typeof doc.title === "string"
+		&& doc.date && typeof doc.date === "string"
+		&& doc.completed !== "" && doc.completed !== null && doc.completed !== undefined && typeof doc.completed === "boolean"
+		&& doc.items.length > 0
+		&& doc.items.every(item =>
+				item.name && typeof item.name === "string"
+				&& item.position !== "" && item.position !== null && item.position !== undefined && typeof item.position === "number"
+				&& item.position === doc.items.indexOf(item)
+				&& item.completed !== "" && item.completed !== null && item.completed !== undefined && typeof item.completed === "boolean"
+				&& Object.keys(item).length === 3
+			)
+		&& (
+			(doc.completed === true && doc.items.every(item => item.completed === true))
+			|| (doc.completed === false && doc.items.some(item => item.completed === false))
+		)
+		&& Object.keys(doc).length === 4
+	);
+	if (check) {
+		// save document to database collection and give feedback
+		let result = await db.collection('todolists').insertOne(doc);
+		if (result.insertedId !== null) {
+			res.status(201).json({
+				status: 'To-do list creation successful.',
+				_id: result.insertedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'To-do list creation failed.',
+			});
+		}
 	} else {
-		res.json({
-			status: 'fail',
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
 		});
 	}
 });
@@ -1007,48 +1038,151 @@ app.get('/todolist/:id', async (req, res) => {
 
 // delete one to do list
 app.delete('/todolist/:id', async (req, res) => {
-	let db = await connect();
+	// save data and connect to database
 	let toDoListId = req.params.id;
-
-	let result = await db.collection('todolists').deleteOne({ _id: mongo.ObjectId(toDoListId) });
-	if (result.deletedCount == 1) {
-		res.statusCode = 201;
-		res.json({
-			status: 'success'
-		});
+	let db = await connect();
+	// check data requirements fulfillment
+	const check = Boolean(
+		toDoListId && toDoListId.match(/^[0-9a-fA-F]{24}$/)
+	);
+	if (check) {
+		// delete document from database collection and give feedback
+		let result = await db.collection('todolists').deleteOne({ _id: mongo.ObjectId(toDoListId) });
+		if (result.deletedCount == 1) {
+			res.status(200).json({
+				status: 'To-do list deletion successful.'
+			});
+		} else {
+			res.status(501).json({
+				status: 'To-do list deletion failed.',
+			});
+		}
 	} else {
-		res.statusCode = 500;
-		res.json({
-			status: 'fail',
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
 		});
 	}
 });
 
 // update one to do list using patch
-app.patch('/todolist/:id', (req, res) => {
+app.patch('/todolist/:id', async (req, res) => {
+	// save and modify data, connect to database
+	let doc = req.body;
+	delete doc._id;
 	let toDoListId = req.params.id;
-	let data = req.body;
-	console.log(data);
-	res.statusCode = 200;
-	res.setHeader('Location', '/todolist/' + toDoListId);
-	res.send();
+	let db = await connect();
+	// check data requirements fulfillment
+	const allowedAttributes = ["title", "date", "completed", "items"];
+	const allowedItemAttributes = ["name", "position", "completed"];
+	const check = Boolean(
+		toDoListId && toDoListId.match(/^[0-9a-fA-F]{24}$/)
+		&& (
+			(doc.title && typeof doc.title === "string")
+			|| (doc.date && typeof doc.date === "string")
+			|| (
+				(doc.completed !== "" && doc.completed !== null && doc.completed !== undefined && typeof doc.completed === "boolean")
+				&& (
+					(doc.items && Array.isArray(doc.items) && doc.items.length > 0)
+					&& doc.items.every(item =>
+						(
+							(item.name && typeof item.name === "string")
+							|| (
+								(item.position !== "" && item.position !== null && item.position !== undefined && typeof item.position === "number")
+								&& (item.position === doc.items.indexOf(item))
+							)
+							|| (item.completed !== "" && item.completed !== null && item.completed !== undefined && typeof item.completed === "boolean")
+						)
+						&& (
+							Object.keys(item).length <= 3
+							&& Object.keys(item).every(attribute => allowedItemAttributes.includes(attribute)))
+							&& Object.values(item).every(value => value !== "" && value !== null && value !== undefined)
+					)
+					&& (
+						(doc.completed === true && doc.items.every(item => item.completed === true))
+						|| (doc.completed === false && doc.items.some(item => item.completed === false))
+					)
+				)
+			)
+		)
+		&& (
+			Object.keys(doc).length <= 4
+			&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+			&& Object.values(doc).every(value => value !== "" && value !== null && value !== undefined)
+		)
+	);
+	if (check) {
+		// update document in database collection and give feedback
+		let result = await db.collection('todolists').updateOne(
+			{ _id: mongo.ObjectId(toDoListId) },
+			{ $set: doc }
+		);
+		if (result.matchedCount == 1 && result.modifiedCount == 1) {
+			res.status(200).json({
+				status: 'To-do list updated successfully',
+				id: result.modifiedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'To-do list update failed.',
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 // update one to do list using put
-app.put('/todolist/:id', (req, res) => {
+app.put('/todolist/:id', async (req, res) => {
+	// save and modify data, connect to database
+	let doc = req.body;
+	delete doc._id;
 	let toDoListId = req.params.id;
-	let data = req.body;
-	if (
-			!data.title || !data.type || !data.date || !data.items || data.items.length==0 || data.completed==null
-			|| Object.keys(data).length != 6
-		) {
-		res.statusCode = 400;
-		return res.send();
+	let db = await connect();
+	// check data requirements fulfillment
+	const check = Boolean(
+		doc.title && typeof doc.title === "string"
+		&& doc.date && typeof doc.date === "string"
+		&& doc.completed !== "" && doc.completed !== null && doc.completed !== undefined && typeof doc.completed === "boolean"
+		&& doc.items.length > 0
+		&& doc.items.every(item =>
+				item.name && typeof item.name === "string"
+				&& item.position !== "" && item.position !== null && item.position !== undefined && typeof item.position === "number"
+				&& item.position === doc.items.indexOf(item)
+				&& item.completed !== "" && item.completed !== null && item.completed !== undefined && typeof item.completed === "boolean"
+				&& Object.keys(item).length === 3
+			)
+		&& (
+			(doc.completed === true && doc.items.every(item => item.completed === true))
+			|| (doc.completed === false && doc.items.some(item => item.completed === false))
+		)
+		&& Object.keys(doc).length === 4
+	);
+	if (check) {
+		// update document in database collection and give feedback
+		let result = await db.collection('todolists').updateOne(
+			{ _id: mongo.ObjectId(toDoListId) },
+			{ $set: doc }
+		);
+		if (result.matchedCount == 1 && result.modifiedCount == 1) {
+			res.status(200).json({
+				status: 'To-do list updated successfully',
+				id: result.modifiedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'To-do list update failed.',
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
 	}
-	console.log(data);
-	res.statusCode = 200;
-	res.setHeader('Location', '/todolist/' + toDoListId);
-	res.send();
 });
 
 
