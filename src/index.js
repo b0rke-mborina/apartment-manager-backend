@@ -231,19 +231,39 @@ app.get('/addresses', async (req, res) => {
 
 // add / insert one address
 app.post('/addresses', async (req, res) => {
-	let db = await connect();
+	// save data and connect to database
 	let doc = req.body;
-	console.log(doc);
-
-	let result = await db.collection('addresses').insertOne(doc);
-	if (result.insertedCount == 1) {
-		res.json({
-			status: 'success',
-			_id: result.insertedId,
-		});
+	// console.log(doc);
+	let db = await connect();
+	// check data requirements fulfillment
+	const allowedAttributes = ["street", "houseNumber", "entranceNumber", "postalNumber", "city", "country"];
+	const check = Boolean(
+		doc.street && typeof doc.street === "string"
+		&& doc.houseNumber && typeof doc.houseNumber === "string"
+		&& doc.entranceNumber && typeof doc.entranceNumber === "string"
+		&& doc.postalNumber && typeof doc.postalNumber === "number"
+		&& doc.city && typeof doc.city === "string"
+		&& doc.country && typeof doc.country === "string"
+		&& Object.keys(doc).length === 6
+		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+	);
+	if (check) {
+		// save document to database collection and give feedback
+		let result = await db.collection('addresses').insertOne(doc);
+		if (result.insertedId !== null) {
+			res.status(201).json({
+				status: 'Address creation successful.',
+				_id: result.insertedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Address creation failed.',
+			});
+		}
 	} else {
-		res.json({
-			status: 'fail',
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
 		});
 	}
 });
@@ -252,45 +272,142 @@ app.post('/addresses', async (req, res) => {
 // route or path: /address/:id
 
 // get one address
-app.get('/address/:id', (req, res) => {
+app.get('/address/:id', async (req, res) => {
+	// save data and connect to database
 	let addressId = req.params.id;
-	let address = storage.Address.filter(item => item.ObjectId == addressId)[0];
-	res.send(address);
+	let db = await connect();
+	// check data requirements fulfillment
+	if (addressId && addressId.match(/^[0-9a-fA-F]{24}$/)) {
+		// get wanted document from database collection and send it
+		let address = await db.collection("addresses").findOne({ _id: mongo.ObjectId(addressId) });
+		// console.log(address);
+		res.status(200).json(address);
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 // delete one address
-app.delete('/address/:id', (req, res) => {
+app.delete('/address/:id', async (req, res) => {	
+	// save data and connect to database
 	let addressId = req.params.id;
-	res.statusCode = 204;
-	res.setHeader('Location', '/address/' + addressId);
-	res.send();
+	let db = await connect();
+	// check data requirements fulfillment
+	const check = Boolean(
+		addressId && addressId.match(/^[0-9a-fA-F]{24}$/)
+	);
+	if (check) {
+		// delete document from database collection and give feedback
+		let result = await db.collection('addresses').deleteOne({ _id: mongo.ObjectId(addressId) });
+		if (result.deletedCount == 1) {
+			res.status(200).json({
+				status: 'To-do list deletion successful.'
+			});
+		} else {
+			res.status(501).json({
+				status: 'To-do list deletion failed.',
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 // update one address using patch
-app.patch('/address/:id', (req, res) => {
+app.patch('/address/:id', async (req, res) => {	
+	// save and modify data, connect to database
+	let doc = req.body;
+	delete doc._id;
 	let addressId = req.params.id;
-	let data = req.body;
-	console.log(data);
-	res.statusCode = 200;
-	res.setHeader('Location', '/address/' + addressId);
-	res.send();
+	let db = await connect();
+	// check data requirements fulfillment
+	const allowedAttributes = ["street", "houseNumber", "entranceNumber", "postalNumber", "city", "country"];
+	const check = Boolean(
+		addressId && addressId.match(/^[0-9a-fA-F]{24}$/)
+		&& (
+			(doc.street && typeof doc.street === "string")
+			|| (doc.houseNumber && typeof doc.houseNumber === "string")
+			|| (doc.entranceNumber && typeof doc.entranceNumber === "string")
+			|| (doc.postalNumber && typeof doc.postalNumber === "number")
+			|| (doc.city && typeof doc.city === "string")
+			|| (doc.country && typeof doc.country === "string")
+		)
+		&& Object.keys(doc).length <= 6
+		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+		&& Object.values(doc).every(value => value !== "" && value !== null && value !== undefined)
+	);
+	if (check) {
+		// update document in database collection and give feedback
+		let result = await db.collection('addresses').updateOne(
+			{ _id: mongo.ObjectId(addressId) },
+			{ $set: doc }
+		);
+		if (result.matchedCount == 1 && result.modifiedCount == 1) {
+			res.status(200).json({
+				status: 'Address updated successfully',
+				id: result.modifiedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Address update failed.',
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 // update one address using put
-app.put('/address/:id', (req, res) => {
+app.put('/address/:id', async (req, res) => {		
+	// save and modify data, connect to database
+	let doc = req.body;
+	delete doc._id;
 	let addressId = req.params.id;
-	let data = req.body;
-	if (
-			!data.street || !data.houseNumber || !data.entranceNumber || !data.postalNumber || !data.city
-			|| Object.keys(data).length != 6
-		) {
-		res.statusCode = 400;
-		return res.send();
+	let db = await connect();
+	// check data requirements fulfillment
+	const allowedAttributes = ["street", "houseNumber", "entranceNumber", "postalNumber", "city", "country"];
+	const check = Boolean(
+		addressId && addressId.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.street && typeof doc.street === "string"
+		&& doc.houseNumber && typeof doc.houseNumber === "string"
+		&& doc.entranceNumber && typeof doc.entranceNumber === "string"
+		&& doc.postalNumber && typeof doc.postalNumber === "number"
+		&& doc.city && typeof doc.city === "string"
+		&& doc.country && typeof doc.country === "string"
+		&& Object.keys(doc).length === 6
+		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+	);
+	if (check) {
+		// update document in database collection and give feedback
+		let result = await db.collection('addresses').updateOne(
+			{ _id: mongo.ObjectId(addressId) },
+			{ $set: doc }
+		);
+		if (result.matchedCount == 1 && result.modifiedCount == 1) {
+			res.status(200).json({
+				status: 'Address updated successfully',
+				id: result.modifiedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Address update failed.',
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
 	}
-	console.log(data);
-	res.statusCode = 200;
-	res.setHeader('Location', '/address/' + addressId);
-	res.send();
 });
 
 
@@ -735,7 +852,9 @@ app.patch('/guest/:id', async (req, res) => {
 		)
 		&& Object.keys(doc).length <= 8 && Object.keys(doc.newestPeriod).length <= 3
 		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+		&& Object.values(doc).every(value => value !== "" && value !== null && value !== undefined)
 		&& Object.keys(doc.newestPeriod).every(attribute => allowedNewestPeriodAttributes.includes(attribute))
+		&& Object.values(doc.newestPeriod).every(value => value !== "" && value !== null && value !== undefined)
 	);
 	if (check) {
 		// update document in database collection and give feedback
@@ -1206,7 +1325,8 @@ app.put('/todolist/:id', async (req, res) => {
 	let db = await connect();
 	// check data requirements fulfillment
 	const check = Boolean(
-		doc.title && typeof doc.title === "string"
+		toDoListId && toDoListId.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.title && typeof doc.title === "string"
 		&& doc.date && typeof doc.date === "string"
 		&& doc.completed !== "" && doc.completed !== null && doc.completed !== undefined && typeof doc.completed === "boolean"
 		&& doc.items.length > 0
