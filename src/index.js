@@ -16,7 +16,6 @@ app.use(cors());
 app.use(express.json());
 
 
-
 // =============== default route or path ===============
 
 // get data
@@ -52,16 +51,23 @@ app.get('/user/current', async (req, res) => {
 
 // route or path: /privateaccomodations
 
-// get all private accomodations
+// get all private accomodations with their addresses
 app.get('/privateaccomodations', async (req, res) => {
+	// generate selection and connect to database
 	let selection = {};
-	if (req.query.limit) req.query.limit = Number(req.query.limit);
-	console.log(selection);
+	if (req.query.state === "occupied") selection["currentState"] = "OCCUPIED";
+	else if (req.query.state === "available") selection["currentState"] = "AVAILABLE";
+	else if (req.query.state === "pending") selection["currentState"] = "PENDING";
+	// console.log(selection);
 	let db = await connect();
-
+	// get all documents from database collection and send it
 	let cursor = await db.collection("privateaccomodations").find(selection);
-	if (req.query.limit) cursor = cursor.limit(req.query.limit);
+	const limit = req.query.limit;
+	if (limit && Number.isInteger(Number(limit)) && Number(limit) >= 0) {
+		cursor = cursor.limit(Number(limit));
+	}
 	let results = await cursor.toArray();
+	// get belonging addresses
 	let accomodations = results.map(async accomodation => {
 		let address = await db.collection("addresses").findOne({ _id: mongo.ObjectId(accomodation.location) });
 		accomodation.location = address;
@@ -69,45 +75,78 @@ app.get('/privateaccomodations', async (req, res) => {
 		return accomodation;
 	});
 	accomodations = await Promise.all(accomodations);
-
-	const current = new Date();
-	const date = `${current.getFullYear()}-${current.getMonth()+1}-${current.getDate()}`;
-	accomodations = results.map(async accomodation => {
-		let period = await db.collection("periods")
-			.findOne({ privateAccomodationObjectId: mongo.ObjectId(accomodation._id), start: { $lte : date }, end: { $gte : date } }); // Manually?
-		if (!period) {
-			accomodation.currentState = "AVAILABLE";
-		} else {
-			let reservation = await db.collection("reservations").findOne({ period: mongo.ObjectId(period._id) });
-			if (reservation.currentState === "CONFIRMED") {
-				accomodation.currentState = "OCCUPIED";
-			} else {
-				accomodation.currentState = "PENDING";
-			}
-		}
-		console.log(accomodation);
-		return accomodation;
-	});
-	accomodations = await Promise.all(accomodations);
-
-	res.json(accomodations);
+	res.status(200).json(accomodations);
 });
 
-// add / insert one private accomodation
+// add / insert one private accomodation (and address if needed)
 app.post('/privateaccomodations', async (req, res) => {
-	let db = await connect();
+	// save data and connect to database
 	let doc = req.body;
 	console.log(doc);
-
-	let result = await db.collection('privateaccomodations').insertOne(doc);
-	if (result.insertedCount == 1) {
-		res.json({
-			status: 'success',
-			_id: result.insertedId,
-		});
+	let db = await connect();
+	// check data requirements fulfillment
+	const allowedAttributes = ["name", "categoryStarNumber", "maxGuestNumber", "location",
+										"lowestFloor", "floorsNumber", "hasYard", "currentState"];
+	const allowedAddressAttributes = ["street", "houseNumber", "entranceNumber", "postalNumber", "city", "country"];
+	const check = Boolean(
+		doc.name && typeof doc.name === "string"
+		&& doc.categoryStarNumber !== "" && doc.categoryStarNumber !== null && doc.categoryStarNumber !== undefined
+			&& typeof doc.categoryStarNumber === "number"
+		&& doc.maxGuestNumber !== "" && doc.maxGuestNumber !== null && doc.maxGuestNumber !== undefined
+			&& typeof doc.maxGuestNumber === "number"
+		&& doc.lowestFloor !== "" && doc.lowestFloor !== null && doc.lowestFloor !== undefined
+			&& typeof doc.lowestFloor === "number"
+		&& doc.floorsNumber !== "" && doc.floorsNumber !== null && doc.floorsNumber !== undefined
+			&& typeof doc.floorsNumber === "number"
+		&& doc.hasYard !== "" && doc.hasYard !== null && doc.hasYard !== undefined
+			&& typeof doc.hasYard === "boolean"
+		&& doc.currentState === "AVAILABLE"
+		&& doc.location && typeof doc.location === "object"
+		&& doc.location.street && typeof doc.location.street === "string"
+		&& doc.location.houseNumber && typeof doc.location.houseNumber === "string"
+		&& doc.location.entranceNumber && typeof doc.location.entranceNumber === "string"
+		&& doc.location.postalNumber !== "" && doc.location.postalNumber !== null && doc.location.postalNumber !== undefined
+			&& typeof doc.location.postalNumber === "number"
+		&& doc.location.city && typeof doc.location.city === "string"
+		&& doc.location.country && typeof doc.location.country === "string"
+		&& Object.keys(doc).length === 8
+		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+		&& Object.keys(doc.location).length === 6
+		&& Object.keys(doc.location).every(attribute => allowedAddressAttributes.includes(attribute))
+	);
+	if (check) {
+		console.log("address OK");
+		let addressInDb = await db.collection("addresses").findOne(doc.location);
+		if (!addressInDb) {
+			let result = await db.collection('addresses').insertOne(doc.location);
+			if (result.insertedId !== null) {
+				doc.location = result.insertedId;
+			} else {
+				res.status(501).json({
+					status: 'Address creation failed.',
+				});
+			}
+		} else {
+			doc.location = addressInDb._id;
+		}
+		console.log("accomodation OK");
+		doc.location = mongo.ObjectId(doc.location);
+		// save document to database collection and give feedback
+		let result = await db.collection('privateaccomodations').insertOne(doc);
+		if (result.insertedId !== null) {
+			res.status(201).json({
+				status: 'Private accomodation creation successful.',
+				_id: result.insertedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Private accomodation creation failed.',
+			});
+		}
 	} else {
-		res.json({
-			status: 'fail',
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
 		});
 	}
 });
@@ -115,89 +154,207 @@ app.post('/privateaccomodations', async (req, res) => {
 
 // route or path: /privateaccomodation/:id
 
-// get one private accomodation
+// get one private accomodation and its address
 app.get('/privateaccomodation/:id', async (req, res) => {
+	// save data and connect to database
 	let privateAccomodationId = req.params.id;
 	let db = await connect();
-
-	let privateAccomodation = await db.collection("privateaccomodations").findOne({ _id: mongo.ObjectId(privateAccomodationId) });
-	let address = await db.collection("addresses").findOne({ _id: mongo.ObjectId(privateAccomodation.location) });
-	privateAccomodation.location = address;
-
-	res.json(privateAccomodation);
+	// check data requirements fulfillment
+	if (privateAccomodationId && privateAccomodationId.match(/^[0-9a-fA-F]{24}$/)) {
+		// get wanted document and subdocument from database collection and send it
+		let privateAccomodation = await db.collection("privateaccomodations").findOne({ _id: mongo.ObjectId(privateAccomodationId) });
+		console.log(privateAccomodation);
+		let address = await db.collection("addresses").findOne({ _id: mongo.ObjectId(privateAccomodation.location) });
+		privateAccomodation.location = address;
+		// console.log(privateAccomodation);
+		res.status(200).json(privateAccomodation);
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
-// delete one private accomodation
+// delete one private accomodation (and its address if needed)
 app.delete('/privateaccomodation/:id', async (req, res) => {
-	let db = await connect();
+	// save data and connect to database
 	let privateAccomodationId = req.params.id;
-	// find accomodation
+	let db = await connect();
+	// check data requirements fulfillment (if id is OK and there isn't any more accomodations on the same address)
 	let accomodation = await db.collection("privateaccomodations").findOne({ _id: mongo.ObjectId(privateAccomodationId) });
-	// chack if there is any more accomodations on the same address
-	let accomodationOnSameAddress = await db.collection("privateaccomodations")
-		.findOne({ location: mongo.ObjectId(accomodation.location) });
-	// delete address if needed
-	if (!accomodationOnSameAddress) {
-		let addressResult = await db.collection('addresses').deleteOne({ _id: accomodation.location });
-		if (addressResult.deletedCount == 1) res.statusCode = 201;
-		else {
-			res.statusCode = 500;
-			res.json({ status: 'fail' });
+	let cursorAccomodationsOnSameAddress = await db.collection("privateaccomodations")
+		.find({ location: mongo.ObjectId(accomodation.location) });
+	let accomodationsOnSameAddress = await cursorAccomodationsOnSameAddress.toArray();
+	const check = Boolean(
+		privateAccomodationId && privateAccomodationId.match(/^[0-9a-fA-F]{24}$/)
+	);
+	if (check) {
+		// delete address if needed
+		if (accomodationsOnSameAddress.length == 1) {
+			let addressResult = await db.collection('addresses').deleteOne({ _id: accomodation.location });
+			if (addressResult.deletedCount != 1) {
+				res.status(501).json({
+					status: 'Deletion failed.',
+				});
+			}
 		}
-	}
-	// delete accomodation
-	let result = await db.collection('privateaccomodations').deleteOne({ _id: mongo.ObjectId(privateAccomodationId) });
-	if (result.deletedCount == 1 && res.statusCode == 201) {
-		res.statusCode = 201;
-		res.json({
-			status: 'success'
-		});
+		// delete document from database collection and give feedback
+		let result = await db.collection('privateaccomodations').deleteOne({ _id: mongo.ObjectId(privateAccomodationId) });
+		if (result.deletedCount == 1) {
+			res.status(200).json({
+				status: 'Private accomodation deletion successful.'
+			});
+		} else {
+			res.status(501).json({
+				status: 'Private accomodation deletion failed.',
+			});
+		}
 	} else {
-		res.statusCode = 500;
-		res.json({
-			status: 'fail',
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
 		});
 	}
 });
 
 // update one private accomodation using patch
-app.patch('/privateaccomodation/:id', (req, res) => {
+app.patch('/privateaccomodation/:id', async (req, res) => {
+	// save data and connect to database
+	let doc = req.body;
+	delete doc._id;
+	// console.log(doc);
 	let privateAccomodationId = req.params.id;
-	let data = req.body;
-	console.log(data);
-	res.statusCode = 200;
-	res.setHeader('Location', '/privateaccomodation/' + privateAccomodationId);
-	res.send();
+	let db = await connect();
+	// check data requirements fulfillment
+	const allowedAttributes = ["name", "categoryStarNumber", "maxGuestNumber", "location",
+										"lowestFloor", "floorsNumber", "hasYard", "currentState"];
+	const check = Boolean(
+		privateAccomodationId && privateAccomodationId.match(/^[0-9a-fA-F]{24}$/)
+		&& (
+			(doc.name && typeof doc.name === "string")
+			|| (item.categoryStarNumber !== "" && item.categoryStarNumber !== null && item.categoryStarNumber !== undefined
+				&& typeof doc.categoryStarNumber === "number")
+			|| (item.maxGuestNumber !== "" && item.maxGuestNumber !== null && item.maxGuestNumber !== undefined && typeof doc.maxGuestNumber === "number")
+			|| (doc.location && doc.location.match(/^[0-9a-fA-F]{24}$/)) //  || !doc.location
+			|| (item.lowestFloor !== "" && item.lowestFloor !== null && item.lowestFloor !== undefined
+				&& typeof doc.lowestFloor === "number")
+			|| (item.floorsNumber !== "" && item.floorsNumber !== null && item.floorsNumber !== undefined
+				&& typeof doc.floorsNumber === "number")
+			|| (doc.hasYard !== "" && doc.hasYard !== null && doc.hasYard !== undefined
+				&& typeof doc.hasYard === "boolean")
+			|| (doc.currentState && typeof doc.currentState === "string")
+		)
+		&& Object.keys(doc).length <= 8
+		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+		&& Object.values(doc).every(value => value !== "" && value !== null && value !== undefined)
+	);
+	if (check) {
+		doc.location = mongo.ObjectId(doc.location);
+		// update document in database collection and give feedback
+		let result = await db.collection('privateaccomodations').updateOne(
+			{ _id: mongo.ObjectId(privateAccomodationId) },
+			{ $set: doc }
+		);
+		if (result.matchedCount == 1 && result.modifiedCount == 1) {
+			res.status(200).json({
+				status: 'Private accomodation updated successfully',
+				id: result.modifiedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Private accomodation update failed.',
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 // update one private accomodation using put
-app.put('/privateaccomodation/:id', (req, res) => {
+app.put('/privateaccomodation/:id', async (req, res) => {
+	// save data and connect to database
+	let doc = req.body;
+	delete doc._id;
+	// console.log(doc);
 	let privateAccomodationId = req.params.id;
-	let data = req.body;
-	if (
-			!data.name || !data.categoryStarNumber || !data.maxGuestNumber || !data.location
-			|| !data.numberofFloors || data.hasYard == null || data.lowestFloor == null
-			|| Object.keys(data).length != 9
-		) {
-		res.statusCode = 400;
-		return res.send();
+	let db = await connect();
+	// check data requirements fulfillment
+	const allowedAttributes = ["name", "categoryStarNumber", "maxGuestNumber", "location",
+										"lowestFloor", "floorsNumber", "hasYard", "currentState"];
+	const check = Boolean(
+		privateAccomodationId && privateAccomodationId.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.name && typeof doc.name === "string"
+		&& item.categoryStarNumber !== "" && item.categoryStarNumber !== null && item.categoryStarNumber !== undefined
+			&& typeof doc.categoryStarNumber === "number"
+		&& item.maxGuestNumber !== "" && item.maxGuestNumber !== null && item.maxGuestNumber !== undefined
+			&& typeof doc.maxGuestNumber === "number"
+		&& doc.location && doc.location.match(/^[0-9a-fA-F]{24}$/)
+		&& item.lowestFloor !== "" && item.lowestFloor !== null && item.lowestFloor !== undefined
+			&& typeof doc.lowestFloor === "number"
+		&& item.floorsNumber !== "" && item.floorsNumber !== null && item.floorsNumber !== undefined
+			&& typeof doc.floorsNumber === "number"
+		&& doc.hasYard !== "" && doc.hasYard !== null && doc.hasYard !== undefined && typeof doc.hasYard === "boolean"
+		&& doc.currentState && typeof doc.currentState === "string"
+		&& Object.keys(doc).length === 8
+		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+	);
+	if (check) {
+		doc.location = mongo.ObjectId(doc.location);
+		// update document in database collection and give feedback
+		let result = await db.collection('privateaccomodations').updateOne(
+			{ _id: mongo.ObjectId(privateAccomodationId) },
+			{ $set: doc }
+		);
+		if (result.matchedCount == 1 && result.modifiedCount == 1) {
+			res.status(200).json({
+				status: 'Private accomodation updated successfully',
+				id: result.modifiedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Private accomodation update failed.',
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
 	}
-	console.log(data);
-	res.statusCode = 200;
-	res.setHeader('Location', '/privateaccomodation/' + privateAccomodationId);
-	res.send();
 });
 
 
 // route or path: /privateaccomodation/:id/address
 
 // get address of one private accomodation
-app.get('/privateaccomodation/:id/address', (req, res) => {
+app.get('/privateaccomodation/:id/address', async (req, res) => {
+	// save data and connect to database
 	let privateAccomodationId = req.params.id;
-	let privateAccomodation = storage.PrivateAccomodation.filter(item => item.ObjectId == privateAccomodationId)[0];
-	let addressId = privateAccomodation.location;
-	let address = storage.Address.filter(item => item.ObjectId == addressId)[0];
-	res.send(address);
+	let db = await connect();
+	// check data requirements fulfillment
+	if (privateAccomodationId && privateAccomodationId.match(/^[0-9a-fA-F]{24}$/)) {
+		// get wanted document and subdocument from database collection and send it
+		let privateAccomodation = await db.collection("privateaccomodations").findOne({ _id: mongo.ObjectId(privateAccomodationId) });
+		// console.log(privateAccomodation);
+		if (privateAccomodation && privateAccomodation.location) {
+			let address = await db.collection("addresses").findOne({ _id: mongo.ObjectId(privateAccomodation.location) });
+			// console.log(address);
+			res.status(200).json(address);
+		} else {
+			res.status(404).json({
+				status: 'Address not found.',
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 
@@ -241,7 +398,7 @@ app.post('/addresses', async (req, res) => {
 		doc.street && typeof doc.street === "string"
 		&& doc.houseNumber && typeof doc.houseNumber === "string"
 		&& doc.entranceNumber && typeof doc.entranceNumber === "string"
-		&& doc.postalNumber && typeof doc.postalNumber === "number"
+		&& doc.postalNumber !== "" && doc.postalNumber !== null && doc.postalNumber !== undefined && typeof doc.postalNumber === "number"
 		&& doc.city && typeof doc.city === "string"
 		&& doc.country && typeof doc.country === "string"
 		&& Object.keys(doc).length === 6
@@ -291,7 +448,7 @@ app.get('/address/:id', async (req, res) => {
 });
 
 // delete one address
-app.delete('/address/:id', async (req, res) => {	
+app.delete('/address/:id', async (req, res) => {
 	// save data and connect to database
 	let addressId = req.params.id;
 	let db = await connect();
@@ -334,7 +491,7 @@ app.patch('/address/:id', async (req, res) => {
 			(doc.street && typeof doc.street === "string")
 			|| (doc.houseNumber && typeof doc.houseNumber === "string")
 			|| (doc.entranceNumber && typeof doc.entranceNumber === "string")
-			|| (doc.postalNumber && typeof doc.postalNumber === "number")
+			|| (item.postalNumber !== "" && item.postalNumber !== null && item.postalNumber !== undefined && typeof doc.postalNumber === "number")
 			|| (doc.city && typeof doc.city === "string")
 			|| (doc.country && typeof doc.country === "string")
 		)
@@ -380,7 +537,7 @@ app.put('/address/:id', async (req, res) => {
 		&& doc.street && typeof doc.street === "string"
 		&& doc.houseNumber && typeof doc.houseNumber === "string"
 		&& doc.entranceNumber && typeof doc.entranceNumber === "string"
-		&& doc.postalNumber && typeof doc.postalNumber === "number"
+		&& item.postalNumber !== "" && item.postalNumber !== null && item.postalNumber !== undefined && typeof doc.postalNumber === "number"
 		&& doc.city && typeof doc.city === "string"
 		&& doc.country && typeof doc.country === "string"
 		&& Object.keys(doc).length === 6
@@ -408,6 +565,20 @@ app.put('/address/:id', async (req, res) => {
 			status: 'Data requirements not met.',
 		});
 	}
+});
+
+
+// route or path: /address/:id/privateaccomodations
+
+// get all private accomodations on one address
+app.get('/address/:id/privateaccomodations', async (req, res) => {
+	// save data and connect to database
+	let addressId = req.params.id;
+	let db = await connect();
+	// get all documents from database collection and send it
+	let cursor = await db.collection("privateaccomodations").find({ location: mongo.ObjectId(addressId) });
+	let results = await cursor.toArray();
+	res.status(200).json(results);
 });
 
 
@@ -447,11 +618,15 @@ app.get('/reservations', async (req, res) => {
 		console.log(date);
 		reservations = reservations.filter(reservation => Date.parse(reservation.period.start.split(" ")[0]) > Date.parse(date));
 	}
-	if (req.query.limit) {
-		req.query.limit = Number(req.query.limit);
+	// if (req.query.limit) {
+		// req.query.limit = Number(req.query.limit);
 		// reservations = reservations.sort((first, second) => first.period.start - second.period.start) // NEEDS TESTING
 			// .slice(0, req.query.limit);
-	}
+	// }
+	// const limit = req.query.limit;
+	// if (limit && Number.isInteger(Number(limit)) && Number(limit) >= 0) {
+		// cursor = cursor.limit(Number(limit));
+	// }
 
 	console.log(reservations);
 	res.json(reservations);
@@ -710,7 +885,6 @@ app.get('/guests', async (req, res) => {
 	// get all documents (and limit them if necessary) from database collection and send it
 	let cursor = await db.collection("guests").find(selection);
 	const limit = req.query.limit;
-	// console.log(limit);
 	if (limit && Number.isInteger(Number(limit)) && Number(limit) >= 0) {
 		cursor = cursor.limit(Number(limit));
 	}
@@ -845,16 +1019,15 @@ app.patch('/guest/:id', async (req, res) => {
 			|| (
 				(doc.currentState && typeof doc.currentState === "string")
 				&& doc.newestPeriod
+				&& Object.keys(doc.newestPeriod).length <= 3
+				&& Object.keys(doc.newestPeriod).every(attribute => allowedNewestPeriodAttributes.includes(attribute))
 				&& (doc.newestPeriod.start && typeof doc.newestPeriod.start === "string")
 				&& (doc.newestPeriod.end && typeof doc.newestPeriod.end === "string")
 				&& (doc.newestPeriod.privateAccomodation && typeof doc.newestPeriod.privateAccomodation === "string")
 			)
 		)
-		&& Object.keys(doc).length <= 8 && Object.keys(doc.newestPeriod).length <= 3
+		&& Object.keys(doc).length <= 8
 		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
-		&& Object.values(doc).every(value => value !== "" && value !== null && value !== undefined)
-		&& Object.keys(doc.newestPeriod).every(attribute => allowedNewestPeriodAttributes.includes(attribute))
-		&& Object.values(doc.newestPeriod).every(value => value !== "" && value !== null && value !== undefined)
 	);
 	if (check) {
 		// update document in database collection and give feedback
