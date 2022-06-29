@@ -769,28 +769,59 @@ app.get('/reservation/:id/guests', (req, res) => {
 
 // get all periods
 app.get('/periods', async (req, res) => {
+	// generate selection and connect to database
+	let selection = {};
+	// console.log(selection);
 	let db = await connect();
-	let cursor = await db.collection("periods").find();
+	// get all documents (and limit them if necessary) from database collection and send it
+	let cursor = await db.collection("periods").find(selection);
+	const limit = req.query.limit;
+	if (limit && Number.isInteger(Number(limit)) && Number(limit) >= 0) {
+		cursor = cursor.limit(Number(limit));
+	}
 	let results = await cursor.toArray();
-	res.json(results);
-	// res.send(storage.Period);
+	res.status(200).json(results);
 });
 
 // add / insert one period
 app.post('/periods', async (req, res) => {
-	let db = await connect();
+	// save data and connect to database
 	let doc = req.body;
 	console.log(doc);
-
-	let result = await db.collection('periods').insertOne(doc);
-	if (result.insertedCount == 1) {
-		res.json({
-			status: 'success',
-			_id: result.insertedId,
-		});
+	let db = await connect();
+	// check data requirements fulfillment
+	const allowedAttributes = ["name", "start", "end", "privateAccomodation"];
+	const allowedPrivateAccomodationAttributes = ["id", "name"];
+	const check = Boolean(
+		doc.name && typeof doc.name === "string"
+		&& doc.start && typeof doc.start === "string"
+		&& doc.end && typeof doc.end === "string"
+		&& doc.privateAccomodation && typeof doc.privateAccomodation === "object"
+		&& doc.privateAccomodation.id && typeof doc.privateAccomodation.id === "string"
+		&& doc.privateAccomodation.id.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.privateAccomodation.name && typeof doc.privateAccomodation.name === "string"
+		&& Object.keys(doc).length === 4 && Object.keys(doc.privateAccomodation).length === 2
+		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+		&& Object.keys(doc.privateAccomodation).every(attribute => allowedPrivateAccomodationAttributes.includes(attribute))
+	);
+	if (check) {
+		doc.privateAccomodation.id = mongo.ObjectId(doc.privateAccomodation.id);
+		// save document to database collection and give feedback
+		let result = await db.collection('periods').insertOne(doc);
+		if (result.insertedId !== null) {
+			res.status(201).json({
+				status: 'Period creation successful.',
+				_id: result.insertedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Period creation failed.',
+			});
+		}
 	} else {
-		res.json({
-			status: 'fail',
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
 		});
 	}
 });
@@ -800,66 +831,161 @@ app.post('/periods', async (req, res) => {
 
 // get one period
 app.get('/period/:id', async (req, res) => {
+	// save data and connect to database
 	let periodId = req.params.id;
 	let db = await connect();
-	let period = await db.collection("periods").findOne({ _id: mongo.ObjectId(periodId) });
-	console.log(period);
-	res.json(period);
+	// check data requirements fulfillment
+	if (periodId && periodId.match(/^[0-9a-fA-F]{24}$/)) {
+		// get wanted document from database collection and send it
+		let period = await db.collection("periods").findOne({ _id: mongo.ObjectId(periodId) });
+		// console.log(period);
+		res.status(200).json(period);
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 // delete one period
-app.delete('/period/:id', async (req, res) => {
-	let db = await connect();
+app.delete('/period/:id', async (req, res) => {	
+	// save data and connect to database
 	let periodId = req.params.id;
-	// if period belongs to reservation, don't delete it
-	let reservation = await db.collection("reservations").findOne({ period: mongo.ObjectId(periodId) });
-	if (reservation) {
-		res.statusCode = 500;
-		res.json({
-			status: 'fail',
-			reason: "You cannot delete this period. It belongs to a reservation."
-		});
-	} else {
-		// delete period
-		let result = await db.collection('periods').deleteOne({ _id: mongo.ObjectId(periodId) });
-		if (result.deletedCount == 1) {
-			res.statusCode = 201;
-			res.json({
-				status: 'success'
-			});
+	let db = await connect();
+	// check data requirements fulfillment
+	const check = Boolean(
+		periodId && periodId.match(/^[0-9a-fA-F]{24}$/)
+	);
+	if (check) {
+		// if guest belongs to a reservation, don't delete it
+		let reservation = await db.collection("reservations").findOne({ period: mongo.ObjectId(periodId) });
+		if (!reservation) {
+			// delete document from database collection and give feedback
+			let result = await db.collection('periods').deleteOne({ _id: mongo.ObjectId(periodId) });
+			if (result.deletedCount == 1) {
+				res.status(200).json({
+					status: 'Period deletion successful.'
+				});
+			} else {
+				res.status(501).json({
+					status: 'Period deletion failed.',
+				});
+			}
 		} else {
-			res.statusCode = 500;
-			res.json({
-				status: 'fail',
+			// send message data requirements not met if that is the case or if period belongs to reservation, don't delete it
+			res.status(400).json({
+				status: 'Period belongs to a reservation and it cannot be deleted.',
 			});
 		}
+	} else {
+		// send message data requirements not met if that is the case or if period belongs to reservation, don't delete it
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
 	}
 });
 
 // update one period using patch
-app.patch('/period/:id', (req, res) => {
+app.patch('/period/:id', async (req, res) => {
+	// save and modify data, connect to database
+	let doc = req.body;
+	delete doc._id;
 	let periodId = req.params.id;
-	let data = req.body;
-	console.log(data);
-	res.statusCode = 200;
-	res.setHeader('Location', '/period/' + periodId);
-	res.send();
+	let db = await connect();
+	// check data requirements fulfillment
+	const allowedAttributes = ["name", "start", "end", "privateAccomodation"];
+	const allowedPrivateAccomodationAttributes = ["id", "name"];
+	const check = Boolean(
+		periodId && periodId.match(/^[0-9a-fA-F]{24}$/)
+		&& (
+			(doc.name && typeof doc.name === "string")
+			|| (doc.start && typeof doc.start === "string")
+			|| (doc.end && typeof doc.end === "string")
+			|| (
+				(doc.privateAccomodation && typeof doc.privateAccomodation === "object")
+				|| (doc.privateAccomodation.id && typeof doc.privateAccomodation.id === "string"
+					&& doc.privateAccomodation.id.match(/^[0-9a-fA-F]{24}$/))
+				|| (doc.privateAccomodation.name && typeof doc.privateAccomodation.name === "string")
+			)
+		)
+		&& Object.keys(doc).length <= 4 && Object.keys(doc.privateAccomodation).length <= 2
+		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+		&& Object.keys(doc.privateAccomodation).every(attribute => allowedPrivateAccomodationAttributes.includes(attribute))
+		&& Object.values(doc).every(value => value !== "" && value !== null && value !== undefined)
+		&& Object.values(doc.privateAccomodation).every(value => value !== "" && value !== null && value !== undefined)
+	);
+	if (check) {
+		doc.privateAccomodation.id = mongo.ObjectId(doc.privateAccomodation.id);
+		// update document in database collection and give feedback
+		let result = await db.collection('periods').updateOne(
+			{ _id: mongo.ObjectId(periodId) },
+			{ $set: doc }
+		);
+		if (result.matchedCount == 1 && result.modifiedCount == 1) {
+			res.status(200).json({
+				status: 'Period updated successfully',
+				id: result.modifiedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Period update failed.',
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 // update one period using put
-app.put('/period/:id', (req, res) => {
+app.put('/period/:id', async (req, res) => {	
+	// save and modify data, connect to database
+	let doc = req.body;
+	delete doc._id;
 	let periodId = req.params.id;
-	let data = req.body;
-	if (
-			!data.start || !data.end || Object.keys(data).length != 3
-		) {
-		res.statusCode = 400;
-		return res.send();
+	let db = await connect();
+	// check data requirements fulfillment
+	const allowedAttributes = ["name", "start", "end", "privateAccomodation"];
+	const allowedPrivateAccomodationAttributes = ["id", "name"];
+	const check = Boolean(
+		periodId && periodId.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.name && typeof doc.name === "string"
+		&& doc.start && typeof doc.start === "string"
+		&& doc.end && typeof doc.end === "string"
+		&& doc.privateAccomodation && typeof doc.privateAccomodation === "object"
+		&& doc.privateAccomodation.id && typeof doc.privateAccomodation.id === "string"
+		&& doc.privateAccomodation.id.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.privateAccomodation.name && typeof doc.privateAccomodation.name === "string"
+		&& Object.keys(doc).length === 4 && Object.keys(doc.privateAccomodation).length === 2
+		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+		&& Object.keys(doc.privateAccomodation).every(attribute => allowedPrivateAccomodationAttributes.includes(attribute))
+	);
+	if (check) {
+		doc.privateAccomodation.id = mongo.ObjectId(doc.privateAccomodation.id);
+		// update document in database collection and give feedback
+		let result = await db.collection('periods').updateOne(
+			{ _id: mongo.ObjectId(periodId) },
+			{ $set: doc }
+		);
+		if (result.matchedCount == 1 && result.modifiedCount == 1) {
+			res.status(200).json({
+				status: 'Period updated successfully',
+				id: result.modifiedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Period update failed.',
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
 	}
-	console.log(data);
-	res.statusCode = 200;
-	res.setHeader('Location', '/period/' + periodId);
-	res.send();
 });
 
 
@@ -981,18 +1107,23 @@ app.delete('/guest/:id', async (req, res) => {
 			let result = await db.collection('guests').deleteOne({ _id: mongo.ObjectId(guestId) });
 			if (result.deletedCount == 1) {
 				res.status(200).json({
-					status: 'Note deletion successful.'
+					status: 'Guest deletion successful.'
 				});
 			} else {
 				res.status(501).json({
-					status: 'Note deletion failed.',
+					status: 'Guest deletion failed.',
 				});
 			}
+		} else {
+			// send message data requirements not met if that is the case or if guest belongs to reservation, don't delete it
+			res.status(400).json({
+				status: 'Guest belongs to a reservation and it cannot be deleted.',
+			});
 		}
 	} else {
 		// send message data requirements not met if that is the case or if guest belongs to reservation, don't delete it
 		res.status(400).json({
-			status: 'Data requirements not met or belongs to a reservation and it cannot be deleted.',
+			status: 'Data requirements not met.',
 		});
 	}
 });
