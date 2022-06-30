@@ -590,79 +590,158 @@ app.get('/address/:id/privateaccomodations', async (req, res) => {
 
 // get all reservations
 app.get('/reservations', async (req, res) => {
+	// connect to database
 	let db = await connect();
-	let cursor = await db.collection("reservations").find();
-	let results = await cursor.toArray();
-	let reservations = results.map(async reservation => {
-		let periodAndMainGuest = await Promise.all([
-			await db.collection("guests").findOne({ _id: mongo.ObjectId(reservation.madeByGuest) }),
-			await db.collection("periods").findOne({ _id: mongo.ObjectId(reservation.period) })
-		]);
-		reservation.madeByGuest = periodAndMainGuest[0];
-		reservation.period = periodAndMainGuest[1];
-		// console.log("guests");
-		// FIX / to-do: add all guests to reservation
-		// console.log(reservation.guests);
-		/*reservation.guests = reservation.guests.map(async guest => {
-			let reservationGuest = await db.collection("guests").findOne({ _id: guest });
-			return reservationGuest;
-		});*/
-		console.log(reservation);
-		return reservation;
-	});
-	reservations = await Promise.all(reservations);
-	
-	if (req.query.upcoming === "true") {
-		const current = new Date();
-		const date = `${current.getFullYear()}-${current.getMonth()+1}-${current.getDate()}`;
-		console.log(date);
-		reservations = reservations.filter(reservation => Date.parse(reservation.period.start.split(" ")[0]) > Date.parse(date));
+	// generate aggregation options for reservations and their periods and main guests
+	let aggregation = [
+		{
+			$lookup: {
+				from: "periods",
+				localField: "period",
+				foreignField: "_id",
+				as: 'period'
+			}
+		},
+		{ $unwind: '$period' },
+		{
+			$lookup: {
+				from: "guests",
+				localField: "madeByGuest",
+				foreignField: "_id",
+				as: 'madeByGuest'
+			}
+		},
+		{ $unwind: '$madeByGuest' }
+	];
+	// add filter for relevant reservations if requested
+	if (req.query.relevant == "true") {
+		aggregation.push({
+			$match: {
+				$or: [
+					{ currentState: "INQUIRY" },
+					{ currentState: "PENDING" },
+					{ currentState: "CONFIRMED" }
+				]
+			}
+		});
 	}
-	// if (req.query.limit) {
-		// req.query.limit = Number(req.query.limit);
-		// reservations = reservations.sort((first, second) => first.period.start - second.period.start) // NEEDS TESTING
-			// .slice(0, req.query.limit);
-	// }
-	// const limit = req.query.limit;
-	// if (limit && Number.isInteger(Number(limit)) && Number(limit) >= 0) {
-		// cursor = cursor.limit(Number(limit));
-	// }
-
+	// add filter for future reservations if requested
+	if (req.query.upcoming == "true") {
+		const current = new Date();
+		let year = current.getFullYear();
+		let month = current.getMonth()+1;
+		let day = current.getDate();
+		if (month < 10) month = "0" + month;
+		if (day < 10) month = "0" + day;
+		const today = `${year}-${month}-${day}`;
+		aggregation.push({ $match: { "period.start" : { $gte: today } } });
+	}
+	// get all reservations and their periods from database collections using aggregation
+	// (sort if upcoming and limit if necessary)
+	let cursor = await db.collection("reservations").aggregate(aggregation);
+	if (req.query.upcoming == "true") cursor = cursor.sort({ "period.start": 1 })
+	// apply limit to cursor if requested
+	const limit = req.query.limit;
+	if (limit && Number.isInteger(Number(limit)) && Number(limit) >= 0) {
+		cursor = cursor.limit(Number(limit));
+	}
+	let reservations = await cursor.toArray();
+	// send all documents and subdocuments found
 	console.log(reservations);
-	res.json(reservations);
+	res.status(200).json(reservations);
 });
 
 // add / insert one reservation
 app.post('/reservations', async (req, res) => {
-	let db = await connect();
+	// save data and connect to database
 	let doc = req.body;
+	console.log(doc);
+	let db = await connect();
 	// set valueInEur
 	if (doc.price.currency === "EUR") {
 		doc.price.valueInEur = doc.price.value;
 	} else {
-		const currentValueInEur = await AxiosServiceExchangeRates.get(
-			`/convert?to=EUR&from=${doc.price.currency}&amount=${doc.price.value}`,
-			{
-				redirect: 'follow',
-				headers: {
-					"apikey": process.env.API_LAYER_KEY,
+		try {
+			const currentValueInEur = await AxiosServiceExchangeRates.get(
+				`/convert?to=EUR&from=${doc.price.currency}&amount=${doc.price.value}`,
+				{
+					redirect: 'follow',
+					headers: {
+						"apikey": process.env.API_LAYER_KEY,
+					}
 				}
-			}
-		);
-		// console.log("currentValueInEur");
-		// console.log(currentValueInEur.data.result);
-		doc.price.valueInEur = currentValueInEur.data.result;
+			);
+			console.log("currentValueInEur");
+			console.log(currentValueInEur.data.result.toFixed(2));
+			doc.price.valueInEur = Number(currentValueInEur.data.result.toFixed(2));
+		} catch (error) {
+			res.status(501).json({
+				status: 'Reservation creation failed.',
+			});
+		}
 	}
-
-	let result = await db.collection('reservations').insertOne(doc);
-	if (result.insertedCount == 1) {
-		res.json({
-			status: 'success',
-			_id: result.insertedId,
-		});
+	// check data requirements fulfillment
+	const allowedAttributes = ["period", "madeByGuest", "currentState", "price", "guests"];
+	const allowedPeriodAttributes = ["name", "start", "end", "privateAccomodation"];
+	const allowedPeriodAccomodationAttributes = ["name", "id"];
+	const allowedPriceAttributes = ["value", "currency", "valueInEur"];
+	const check = Boolean(
+		doc.period && typeof doc.period === "object"
+		&& doc.madeByGuest && typeof doc.madeByGuest === "string" && doc.madeByGuest.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.currentState && typeof doc.currentState === "string"
+		&& doc.price && typeof doc.price === "object"
+		&& doc.guests && typeof Array.isArray(doc.guests)
+		&& doc.period.name && typeof doc.period.name === "string"
+		&& doc.period.start && typeof doc.period.start === "string"
+		&& doc.period.end && typeof doc.period.end === "string"
+		&& doc.period.privateAccomodation && typeof doc.period.privateAccomodation === "object"
+		&& doc.period.privateAccomodation.id && typeof doc.period.privateAccomodation.id === "string"
+			&& doc.period.privateAccomodation.id.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.period.privateAccomodation.name && typeof doc.period.privateAccomodation.name === "string"
+		&& doc.price.value !== "" && doc.price.value !== null && doc.price.value !== undefined
+			&& typeof doc.price.value === "number"
+		&& doc.price.currency && typeof doc.price.currency === "string"
+		&& doc.price.valueInEur !== "" && doc.price.valueInEur !== null && doc.price.valueInEur !== undefined
+			&& typeof doc.price.valueInEur === "number"
+		&& doc.guests.every(guest => guest && typeof guest === "string" && guest.match(/^[0-9a-fA-F]{24}$/))
+		&& Object.keys(doc).length === 5
+		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+		&& Object.keys(doc.period).length === 4
+		&& Object.keys(doc.period).every(attribute => allowedPeriodAttributes.includes(attribute))
+		&& Object.keys(doc.period.privateAccomodation).length === 2
+		&& Object.keys(doc.period.privateAccomodation).every(attribute => allowedPeriodAccomodationAttributes.includes(attribute))
+		&& Object.keys(doc.price).length === 3
+		&& Object.keys(doc.price).every(attribute => allowedPriceAttributes.includes(attribute))
+	);
+	if (check) {
+		doc.period.privateAccomodation.id = mongo.ObjectId(doc.period.privateAccomodation.id);
+		let resultPeriod = await db.collection('periods').insertOne(doc.period);
+		if (resultPeriod.insertedId !== null) {
+			doc.period = resultPeriod.insertedId;
+		} else {
+			res.status(501).json({
+				status: 'Period creation failed.',
+			});
+		}
+		doc.period = mongo.ObjectId(doc.period);
+		doc.madeByGuest = mongo.ObjectId(doc.madeByGuest);
+		doc.guests = doc.guests.map(guest => mongo.ObjectId(guest));
+		// save document to database collection and give feedback
+		let result = await db.collection('reservations').insertOne(doc);
+		if (result.insertedId !== null) {
+			res.status(201).json({
+				status: 'Reservation creation successful.',
+				_id: result.insertedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Reservation creation failed.',
+			});
+		}
 	} else {
-		res.json({
-			status: 'fail',
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
 		});
 	}
 });
@@ -672,46 +751,91 @@ app.post('/reservations', async (req, res) => {
 
 // get one reservation
 app.get('/reservation/:id', async (req, res) => {
+	// save data and connect to database
 	let reservationId = req.params.id;
 	let db = await connect();
-
-	let reservation = await db.collection("reservations").findOne({ _id: mongo.ObjectId(reservationId) });
-	let period = await db.collection("periods").findOne({ _id: mongo.ObjectId(reservation.period) });
-	reservation.period = period;
-	let guestWhoBooked = await db.collection("guests").findOne({ _id: mongo.ObjectId(reservation.madeByGuest) });
-	reservation.madeByGuest = guestWhoBooked;
-	let guestsFromDb = reservation.guests.map(async guest => {
-		let guestFromDB = await db.collection("guests").findOne({ _id: mongo.ObjectId(guest) });
-		return guestFromDB;
-	});
-	reservation.guests = await Promise.all(guestsFromDb);
-	console.log(reservation.guests);
-
-	res.json(reservation);
+	// check data requirements fulfillment
+	if (reservationId && reservationId.match(/^[0-9a-fA-F]{24}$/)) {
+		// get wanted document and its subdocuments from database collections
+		let cursor = await db.collection("reservations").aggregate([
+			{
+				$match: { _id: mongo.ObjectId(reservationId) }
+			},
+			{ $unwind: '$period' },
+			{
+				$lookup: {
+					from: "periods",
+					localField: "period",
+					foreignField: "_id",
+					as: 'period'
+				}
+			},
+			{ $unwind: '$period' },
+			{
+				$lookup: {
+					from: "guests",
+					localField: "madeByGuest",
+					foreignField: "_id",
+					as: 'madeByGuest'
+				}
+			},
+			{ $unwind: '$madeByGuest' },
+			{
+				$lookup: {
+					from: "guests",
+					localField: "guests",
+					foreignField: "_id",
+					as: 'guests'
+				}
+			}
+		]);
+		let reservation = await cursor.toArray();
+		// console.log(reservation);
+		// send retrieved data
+		if (reservation.length === 0) res.status(200).json(null);
+		else res.status(200).json(reservation[0]);
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 // delete one reservation
 app.delete('/reservation/:id', async (req, res) => {
-	let db = await connect();
+	// save data and connect to database
 	let reservationId = req.params.id;
-	// delete belonging period
-	let periodId = await db.collection('reservations').findOne({ _id: mongo.ObjectId(reservationId) }).period;
-	let periodResult = await db.collection('periods').deleteOne({ _id: mongo.ObjectId(periodId) });
-	if (periodResult.deletedCount == 1) res.statusCode = 201;
-	else {
-		res.statusCode = 500;
-		res.json({ status: 'fail' });
-	}
-	// delete reservation
-	let result = await db.collection('reservations').deleteOne({ _id: mongo.ObjectId(reservationId) });
-	if (result.deletedCount == 1) {
-		res.json({
-			status: 'success'
-		});
+	let db = await connect();
+	// check data requirements fulfillment
+	const check = Boolean(
+		reservationId && reservationId.match(/^[0-9a-fA-F]{24}$/)
+	);
+	if (check) {
+		// delete belonging period
+		let reservation = await db.collection('reservations').findOne({ _id: mongo.ObjectId(reservationId) });
+		let periodId = reservation.period;
+		let periodResult = await db.collection('periods').deleteOne({ _id: mongo.ObjectId(periodId) });
+		if (periodResult.deletedCount != 1) {
+			res.status(501).json({
+				status: 'Deletion failed.',
+			});
+		}
+		// delete reservation
+		let result = await db.collection('reservations').deleteOne({ _id: mongo.ObjectId(reservationId) });
+		if (result.deletedCount == 1) {
+			res.status(200).json({
+				status: 'Reservation deletion successful.'
+			});
+		} else {
+			res.status(501).json({
+				status: 'Reservation deletion failed.',
+			});
+		}
 	} else {
-		res.statusCode = 500;
-		res.json({
-			status: 'fail',
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
 		});
 	}
 });
