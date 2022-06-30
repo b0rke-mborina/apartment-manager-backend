@@ -20,15 +20,7 @@ app.use(express.json());
 
 // get data
 app.get('/', (req, res) => {
-	/*let data = {
-		privateAccomodations: storage.PrivateAccomodation
-			.sort((first, second) => first.name - second.name)
-			.slice(0, 3),
-		reservations: storage.Reservation
-			.sort((first, second) => first.currentState - second.currentState)
-			.slice(0, 3)
-	};
-	res.send([storage.User[0], data]);*/
+	res.status(200).json({});
 });
 
 
@@ -872,16 +864,51 @@ app.put('/reservation/:id', (req, res) => {
 // route or path: /reservation/:id/guests
 
 // get price of one reservation
-app.get('/reservation/:id/guests', (req, res) => {
+app.get('/reservation/:id/guests', async (req, res) => {	
+	// save data and connect to database
 	let reservationId = req.params.id;
-	let reservation = storage.Reservation.filter(item => item.ObjectId == reservationId)[0];
-	let guestIds = reservation.guests;
-	let guests = [];
-	guestIds.forEach(guestId => {
-		let guest = storage.Guest.filter(item => item.ObjectId == guestId)[0];
-		guests.push(guest);
-	});
-	res.send(guests);
+	let db = await connect();
+	// check data requirements fulfillment
+	if (reservationId && reservationId.match(/^[0-9a-fA-F]{24}$/)) {
+		// get wanted document and its subdocuments from database collections
+		let cursor = await db.collection("reservations").aggregate([
+			{
+				$match: { _id: mongo.ObjectId(reservationId) }
+			},
+			{
+				$lookup: {
+					from: "guests",
+					localField: "madeByGuest",
+					foreignField: "_id",
+					as: 'madeByGuest'
+				}
+			},
+			{ $unwind: '$madeByGuest' },
+			{
+				$lookup: {
+					from: "guests",
+					localField: "guests",
+					foreignField: "_id",
+					as: 'guests'
+				}
+			}
+		]);
+		let reservation = await cursor.toArray();
+		// modify and send retrieved data
+		if (reservation.length === 0) res.status(200).json(null);
+		else {
+			reservation = reservation[0];
+			// console.log(reservation);
+			let guests = reservation.guests;
+			guests.unshift(reservation.madeByGuest);
+			res.status(200).json(guests);
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 
