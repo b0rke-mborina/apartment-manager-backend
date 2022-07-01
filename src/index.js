@@ -649,29 +649,6 @@ app.post('/reservations', async (req, res) => {
 	let doc = req.body;
 	console.log(doc);
 	let db = await connect();
-	// set valueInEur
-	if (doc.price.currency === "EUR") {
-		doc.price.valueInEur = doc.price.value;
-	} else {
-		try {
-			const currentValueInEur = await AxiosServiceExchangeRates.get(
-				`/convert?to=EUR&from=${doc.price.currency}&amount=${doc.price.value}`,
-				{
-					redirect: 'follow',
-					headers: {
-						"apikey": process.env.API_LAYER_KEY,
-					}
-				}
-			);
-			console.log("currentValueInEur");
-			console.log(currentValueInEur.data.result.toFixed(2));
-			doc.price.valueInEur = Number(currentValueInEur.data.result.toFixed(2));
-		} catch (error) {
-			res.status(501).json({
-				status: 'Reservation creation failed.',
-			});
-		}
-	}
 	// check data requirements fulfillment
 	const allowedAttributes = ["period", "madeByGuest", "currentState", "price", "guests"];
 	const allowedPeriodAttributes = ["name", "start", "end", "privateAccomodation"];
@@ -682,7 +659,7 @@ app.post('/reservations', async (req, res) => {
 		&& doc.madeByGuest && typeof doc.madeByGuest === "string" && doc.madeByGuest.match(/^[0-9a-fA-F]{24}$/)
 		&& doc.currentState && typeof doc.currentState === "string"
 		&& doc.price && typeof doc.price === "object"
-		&& doc.guests && typeof Array.isArray(doc.guests)
+		&& doc.guests && Array.isArray(doc.guests)
 		&& doc.period.name && typeof doc.period.name === "string"
 		&& doc.period.start && typeof doc.period.start === "string"
 		&& doc.period.end && typeof doc.period.end === "string"
@@ -693,8 +670,7 @@ app.post('/reservations', async (req, res) => {
 		&& doc.price.value !== "" && doc.price.value !== null && doc.price.value !== undefined
 			&& typeof doc.price.value === "number"
 		&& doc.price.currency && typeof doc.price.currency === "string"
-		&& doc.price.valueInEur !== "" && doc.price.valueInEur !== null && doc.price.valueInEur !== undefined
-			&& typeof doc.price.valueInEur === "number"
+		&& doc.price.valueInEur === null
 		&& doc.guests.every(guest => guest && typeof guest === "string" && guest.match(/^[0-9a-fA-F]{24}$/))
 		&& Object.keys(doc).length === 5
 		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
@@ -706,6 +682,29 @@ app.post('/reservations', async (req, res) => {
 		&& Object.keys(doc.price).every(attribute => allowedPriceAttributes.includes(attribute))
 	);
 	if (check) {
+		// set valueInEur
+		if (doc.price.currency === "EUR") {
+			doc.price.valueInEur = doc.price.value;
+		} else {
+			try {
+				const currentValueInEur = await AxiosServiceExchangeRates.get(
+					`/convert?to=EUR&from=${doc.price.currency}&amount=${doc.price.value}`,
+					{
+						redirect: 'follow',
+						headers: {
+							"apikey": process.env.API_LAYER_KEY,
+						}
+					}
+				);
+				console.log("currentValueInEur");
+				console.log(currentValueInEur.data.result.toFixed(2));
+				doc.price.valueInEur = Number(currentValueInEur.data.result.toFixed(2));
+			} catch (error) {
+				res.status(501).json({
+					status: 'Reservation creation failed.',
+				});
+			}
+		}
 		doc.period.privateAccomodation.id = mongo.ObjectId(doc.period.privateAccomodation.id);
 		let resultPeriod = await db.collection('periods').insertOne(doc.period);
 		if (resultPeriod.insertedId !== null) {
@@ -833,31 +832,208 @@ app.delete('/reservation/:id', async (req, res) => {
 });
 
 // update one reservation using patch
-app.patch('/reservation/:id', (req, res) => {
+app.patch('/reservation/:id', async (req, res) => {
+	// save data and connect to database
 	let reservationId = req.params.id;
-	let data = req.body;
-	console.log(data);
-	res.statusCode = 200;
-	res.setHeader('Location', '/reservation/' + reservationId);
-	res.send();
+	let doc = req.body;
+	delete doc._id;
+	console.log(doc);
+	let db = await connect();
+	// check data requirements fulfillment
+	const allowedAttributes = ["period", "madeByGuest", "currentState", "price", "guests"];
+	const allowedPriceAttributes = ["value", "currency", "valueInEur"];
+	const check = Boolean(
+		reservationId && reservationId.match(/^[0-9a-fA-F]{24}$/)
+		&& (
+			(doc.period && doc.period.match(/^[0-9a-fA-F]{24}$/))
+			|| (doc.madeByGuest && typeof doc.madeByGuest === "string" && doc.madeByGuest.match(/^[0-9a-fA-F]{24}$/))
+			|| (doc.currentState && typeof doc.currentState === "string")
+			|| (doc.price && typeof doc.price === "object"
+				&& doc.price.value !== "" && doc.price.value !== null && doc.price.value !== undefined
+					&& typeof doc.price.value === "number"
+				&& doc.price.currency && typeof doc.price.currency === "string"
+				&& doc.price.valueInEur === null
+			)
+			|| (
+				doc.guests && Array.isArray(doc.guests)
+				&& doc.guests.every(guest => guest && typeof guest === "string" && guest.match(/^[0-9a-fA-F]{24}$/))
+			)
+		)
+		&& Object.keys(doc).length <= 5
+		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+		&& Object.keys(doc.price).length <= 3
+		&& Object.keys(doc.price).every(attribute => allowedPriceAttributes.includes(attribute))
+	);
+	if (check) {
+		// set valueInEur
+		if (doc.price.currency === "EUR") {
+			doc.price.valueInEur = doc.price.value;
+		} else {
+			try {
+				const currentValueInEur = await AxiosServiceExchangeRates.get(
+					`/convert?to=EUR&from=${doc.price.currency}&amount=${doc.price.value}`,
+					{
+						redirect: 'follow',
+						headers: {
+							"apikey": process.env.API_LAYER_KEY,
+						}
+					}
+				);
+				// console.log("currentValueInEur");
+				// console.log(currentValueInEur.data.result.toFixed(2));
+				doc.price.valueInEur = Number(currentValueInEur.data.result.toFixed(2));
+			} catch (error) {
+				res.status(501).json({
+					status: 'Reservation update failed.',
+				});
+			}
+		}
+		// update subdocument in database collection and give feedback
+		doc.period = mongo.ObjectId(doc.period);
+		doc.madeByGuest = mongo.ObjectId(doc.madeByGuest);
+		doc.guests = doc.guests.map(guest => mongo.ObjectId(guest));
+		// update document in database collection and give feedback
+		let result = await db.collection('reservations').updateOne(
+			{ _id: mongo.ObjectId(reservationId) },
+			{ $set: doc }
+		);
+		if (result.matchedCount == 1 && result.modifiedCount == 1) {
+			res.status(200).json({
+				status: 'Reservation updated successfully',
+				id: result.modifiedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Reservation update failed.',
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 // update one reservation using put
-app.put('/reservation/:id', (req, res) => {
+app.put('/reservation/:id', async (req, res) => {
+	// save data and connect to database
 	let reservationId = req.params.id;
-	let data = req.body;
-	if (
-			!data.period || !data.madeByGuest || !data.guests || data.guests.length==0 || !data.currentState
-			|| !data.price.value || !data.price.currency || !data.price.valueInEur
-			|| Object.keys(data).length != 6
-		) {
-		res.statusCode = 400;
-		return res.send();
+	let doc = req.body;
+	delete doc._id;
+	console.log(doc);
+	let db = await connect();
+	// check data requirements fulfillment
+	const allowedAttributes = ["period", "madeByGuest", "currentState", "price", "guests"];
+	const allowedPriceAttributes = ["value", "currency", "valueInEur"];
+	const check = Boolean(
+		reservationId && reservationId.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.period && doc.period.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.madeByGuest && typeof doc.madeByGuest === "string" && doc.madeByGuest.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.currentState && typeof doc.currentState === "string"
+		&& doc.price && typeof doc.price === "object"
+		&& doc.price.value !== "" && doc.price.value !== null && doc.price.value !== undefined
+			&& typeof doc.price.value === "number"
+		&& doc.price.currency && typeof doc.price.currency === "string"
+		&& doc.price.valueInEur === null
+		&& doc.guests && Array.isArray(doc.guests)
+		&& doc.guests.every(guest => guest && typeof guest === "string" && guest.match(/^[0-9a-fA-F]{24}$/))
+		&& Object.keys(doc).length === 5
+		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
+		&& Object.keys(doc.price).length === 3
+		&& Object.keys(doc.price).every(attribute => allowedPriceAttributes.includes(attribute))
+	);
+	if (check) {
+		// set valueInEur
+		if (doc.price.currency === "EUR") {
+			doc.price.valueInEur = doc.price.value;
+		} else {
+			try {
+				const currentValueInEur = await AxiosServiceExchangeRates.get(
+					`/convert?to=EUR&from=${doc.price.currency}&amount=${doc.price.value}`,
+					{
+						redirect: 'follow',
+						headers: {
+							"apikey": process.env.API_LAYER_KEY,
+						}
+					}
+				);
+				// console.log("currentValueInEur");
+				// console.log(currentValueInEur.data.result.toFixed(2));
+				doc.price.valueInEur = Number(currentValueInEur.data.result.toFixed(2));
+			} catch (error) {
+				res.status(501).json({
+					status: 'Reservation update failed.',
+				});
+			}
+		}
+		// update subdocument in database collection and give feedback
+		doc.period = mongo.ObjectId(doc.period);
+		doc.madeByGuest = mongo.ObjectId(doc.madeByGuest);
+		doc.guests = doc.guests.map(guest => mongo.ObjectId(guest));
+		// update document in database collection and give feedback
+		let result = await db.collection('reservations').updateOne(
+			{ _id: mongo.ObjectId(reservationId) },
+			{ $set: doc }
+		);
+		if (result.matchedCount == 1 && result.modifiedCount == 1) {
+			res.status(200).json({
+				status: 'Reservation updated successfully',
+				id: result.modifiedId,
+			});
+		} else {
+			res.status(501).json({
+				status: 'Reservation update failed.',
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
 	}
-	console.log(data);
-	res.statusCode = 200;
-	res.setHeader('Location', '/reservation/' + reservationId);
-	res.send();
+});
+
+
+// route or path: /reservation/:id/period
+
+// get price of one reservation
+app.get('/reservation/:id/period', async (req, res) => {	
+	// save data and connect to database
+	let reservationId = req.params.id;
+	let db = await connect();
+	// check data requirements fulfillment
+	if (reservationId && reservationId.match(/^[0-9a-fA-F]{24}$/)) {
+		// get wanted document and its subdocuments from database collections
+		let cursor = await db.collection("reservations").aggregate([
+			{
+				$match: { _id: mongo.ObjectId(reservationId) }
+			},
+			{
+				$lookup: {
+					from: "periods",
+					localField: "period",
+					foreignField: "_id",
+					as: 'period'
+				}
+			},
+			{ $unwind: '$period' }
+		]);
+		let reservation = await cursor.toArray();
+		// modify and send retrieved data
+		if (reservation.length === 0) res.status(200).json(null);
+		else {
+			reservation = reservation[0];
+			console.log(reservation);
+			let period = reservation.period;
+			res.status(200).json(period);
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 
