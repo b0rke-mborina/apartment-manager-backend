@@ -74,7 +74,7 @@ app.get('/privateaccomodations', async (req, res) => {
 app.post('/privateaccomodations', async (req, res) => {
 	// save data and connect to database
 	let doc = req.body;
-	console.log(doc);
+	// console.log(doc);
 	let db = await connect();
 	// check data requirements fulfillment
 	const allowedAttributes = ["name", "categoryStarNumber", "maxGuestNumber", "location",
@@ -107,7 +107,7 @@ app.post('/privateaccomodations', async (req, res) => {
 		&& Object.keys(doc.location).every(attribute => allowedAddressAttributes.includes(attribute))
 	);
 	if (check) {
-		console.log("address OK");
+		// console.log("address OK");
 		let addressInDb = await db.collection("addresses").findOne(doc.location);
 		if (!addressInDb) {
 			let result = await db.collection('addresses').insertOne(doc.location);
@@ -121,7 +121,7 @@ app.post('/privateaccomodations', async (req, res) => {
 		} else {
 			doc.location = addressInDb._id;
 		}
-		console.log("accomodation OK");
+		// console.log("accomodation OK");
 		doc.location = mongo.ObjectId(doc.location);
 		// save document to database collection and give feedback
 		let result = await db.collection('privateaccomodations').insertOne(doc);
@@ -155,7 +155,7 @@ app.get('/privateaccomodation/:id', async (req, res) => {
 	if (privateAccomodationId && privateAccomodationId.match(/^[0-9a-fA-F]{24}$/)) {
 		// get wanted document and subdocument from database collection and send it
 		let privateAccomodation = await db.collection("privateaccomodations").findOne({ _id: mongo.ObjectId(privateAccomodationId) });
-		console.log(privateAccomodation);
+		// console.log(privateAccomodation);
 		let address = await db.collection("addresses").findOne({ _id: mongo.ObjectId(privateAccomodation.location) });
 		privateAccomodation.location = address;
 		// console.log(privateAccomodation);
@@ -371,7 +371,7 @@ app.get('/addresses', async (req, res) => {
 	// console.log(req.query.city);
 	if(req.query.country) selection["country"] = req.query.country;
 	// console.log(req.query.country);
-	console.log(selection);
+	// console.log(selection);
 	let db = await connect();
 	let cursor = await db.collection("addresses").find(selection);
 	let results = await cursor.toArray();
@@ -639,7 +639,7 @@ app.get('/reservations', async (req, res) => {
 	}
 	let reservations = await cursor.toArray();
 	// send all documents and subdocuments found
-	console.log(reservations);
+	// console.log(reservations);
 	res.status(200).json(reservations);
 });
 
@@ -647,7 +647,7 @@ app.get('/reservations', async (req, res) => {
 app.post('/reservations', async (req, res) => {
 	// save data and connect to database
 	let doc = req.body;
-	console.log(doc);
+	// console.log(doc);
 	let db = await connect();
 	// check data requirements fulfillment
 	const allowedAttributes = ["period", "madeByGuest", "currentState", "price", "guests"];
@@ -696,8 +696,8 @@ app.post('/reservations', async (req, res) => {
 						}
 					}
 				);
-				console.log("currentValueInEur");
-				console.log(currentValueInEur.data.result.toFixed(2));
+				// console.log("currentValueInEur");
+				// console.log(currentValueInEur.data.result.toFixed(2));
 				doc.price.valueInEur = Number(currentValueInEur.data.result.toFixed(2));
 			} catch (error) {
 				res.status(501).json({
@@ -837,7 +837,7 @@ app.patch('/reservation/:id', async (req, res) => {
 	let reservationId = req.params.id;
 	let doc = req.body;
 	delete doc._id;
-	console.log(doc);
+	// console.log(doc);
 	let db = await connect();
 	// check data requirements fulfillment
 	const allowedAttributes = ["period", "madeByGuest", "currentState", "price", "guests"];
@@ -921,7 +921,7 @@ app.put('/reservation/:id', async (req, res) => {
 	let reservationId = req.params.id;
 	let doc = req.body;
 	delete doc._id;
-	console.log(doc);
+	// console.log(doc);
 	let db = await connect();
 	// check data requirements fulfillment
 	const allowedAttributes = ["period", "madeByGuest", "currentState", "price", "guests"];
@@ -1024,7 +1024,7 @@ app.get('/reservation/:id/period', async (req, res) => {
 		if (reservation.length === 0) res.status(200).json(null);
 		else {
 			reservation = reservation[0];
-			console.log(reservation);
+			// console.log(reservation);
 			let period = reservation.period;
 			res.status(200).json(period);
 		}
@@ -1114,7 +1114,7 @@ app.get('/periods', async (req, res) => {
 app.post('/periods', async (req, res) => {
 	// save data and connect to database
 	let doc = req.body;
-	console.log(doc);
+	// console.log(doc);
 	let db = await connect();
 	// check data requirements fulfillment
 	const allowedAttributes = ["name", "start", "end", "privateAccomodation"];
@@ -1349,7 +1349,7 @@ app.get('/guests', async (req, res) => {
 app.post('/guests', async (req, res) => {
 	// save data and connect to database
 	let doc = req.body;
-	console.log(doc);
+	// console.log(doc);
 	let db = await connect();
 	// check data requirements fulfillment
 	const allowedAttributes = ["firstName", "lastName", "city", "country", "email", "phoneNumber", "currentState", "newestPeriod"];
@@ -1591,7 +1591,7 @@ app.get('/notes', async (req, res) => {
 app.post('/notes', async (req, res) => {
 	// save data and connect to database
 	let doc = req.body;
-	console.log(doc);
+	// console.log(doc);
 	let db = await connect();
 	// check data requirements fulfillment
 	const check = Boolean(
@@ -1784,7 +1784,7 @@ app.get('/todolists', async (req, res) => {
 app.post('/todolists', async (req, res) => {
 	// save data and connect to database
 	let doc = req.body;
-	console.log(doc);
+	// console.log(doc);
 	let db = await connect();
 	// check data requirements fulfillment
 	const check = Boolean(
