@@ -654,6 +654,9 @@ app.get('/reservations', async (req, res) => {
 	// generate aggregation options for reservations and their periods and main guests
 	let aggregation = [
 		{
+			$match: { user: mongo.ObjectId(req.query.userId) }
+		},
+		{
 			$lookup: {
 				from: "periods",
 				localField: "period",
@@ -717,16 +720,18 @@ app.post('/reservations', async (req, res) => {
 	// console.log(doc);
 	let db = await connect();
 	// check data requirements fulfillment
-	const allowedAttributes = ["period", "madeByGuest", "currentState", "price", "guests"];
-	const allowedPeriodAttributes = ["name", "start", "end", "privateAccomodation"];
+	const allowedAttributes = ["user", "period", "madeByGuest", "currentState", "price", "guests"];
+	const allowedPeriodAttributes = ["user", "name", "start", "end", "privateAccomodation"];
 	const allowedPeriodAccomodationAttributes = ["name", "id"];
 	const allowedPriceAttributes = ["value", "currency", "valueInEur"];
 	const check = Boolean(
-		doc.period && typeof doc.period === "object"
+		doc.user && doc.user.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.period && typeof doc.period === "object"
 		&& doc.madeByGuest && typeof doc.madeByGuest === "string" && doc.madeByGuest.match(/^[0-9a-fA-F]{24}$/)
 		&& doc.currentState && typeof doc.currentState === "string"
 		&& doc.price && typeof doc.price === "object"
 		&& doc.guests && Array.isArray(doc.guests)
+		&& doc.period.user && doc.period.user.match(/^[0-9a-fA-F]{24}$/)
 		&& doc.period.name && typeof doc.period.name === "string"
 		&& doc.period.start && typeof doc.period.start === "string"
 		&& doc.period.end && typeof doc.period.end === "string"
@@ -739,9 +744,9 @@ app.post('/reservations', async (req, res) => {
 		&& doc.price.currency && typeof doc.price.currency === "string"
 		&& doc.price.valueInEur === null
 		&& doc.guests.every(guest => guest && typeof guest === "string" && guest.match(/^[0-9a-fA-F]{24}$/))
-		&& Object.keys(doc).length === 5
+		&& Object.keys(doc).length === 6
 		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
-		&& Object.keys(doc.period).length === 4
+		&& Object.keys(doc.period).length === 5
 		&& Object.keys(doc.period).every(attribute => allowedPeriodAttributes.includes(attribute))
 		&& Object.keys(doc.period.privateAccomodation).length === 2
 		&& Object.keys(doc.period.privateAccomodation).every(attribute => allowedPeriodAccomodationAttributes.includes(attribute))
@@ -772,6 +777,7 @@ app.post('/reservations', async (req, res) => {
 				});
 			}
 		}
+		doc.period.user = mongo.ObjectId(doc.period.user);
 		doc.period.privateAccomodation.id = mongo.ObjectId(doc.period.privateAccomodation.id);
 		let resultPeriod = await db.collection('periods').insertOne(doc.period);
 		if (resultPeriod.insertedId !== null) {
@@ -781,6 +787,7 @@ app.post('/reservations', async (req, res) => {
 				status: 'Period creation failed.',
 			});
 		}
+		doc.user = mongo.ObjectId(doc.user);
 		doc.period = mongo.ObjectId(doc.period);
 		doc.madeByGuest = mongo.ObjectId(doc.madeByGuest);
 		doc.guests = doc.guests.map(guest => mongo.ObjectId(guest));
@@ -811,13 +818,18 @@ app.post('/reservations', async (req, res) => {
 app.get('/reservation/:id', async (req, res) => {
 	// save data and connect to database
 	let reservationId = req.params.id;
+	let userId = req.query.userId;
 	let db = await connect();
 	// check data requirements fulfillment
-	if (reservationId && reservationId.match(/^[0-9a-fA-F]{24}$/)) {
+	if (reservationId && reservationId.match(/^[0-9a-fA-F]{24}$/)
+		&& userId && userId.match(/^[0-9a-fA-F]{24}$/)) {
 		// get wanted document and its subdocuments from database collections
 		let cursor = await db.collection("reservations").aggregate([
 			{
 				$match: { _id: mongo.ObjectId(reservationId) }
+			},
+			{
+				$match: { user: mongo.ObjectId(userId) }
 			},
 			{ $unwind: '$period' },
 			{
@@ -907,10 +919,11 @@ app.patch('/reservation/:id', async (req, res) => {
 	// console.log(doc);
 	let db = await connect();
 	// check data requirements fulfillment
-	const allowedAttributes = ["period", "madeByGuest", "currentState", "price", "guests"];
+	const allowedAttributes = ["user", "period", "madeByGuest", "currentState", "price", "guests"];
 	const allowedPriceAttributes = ["value", "currency", "valueInEur"];
 	const check = Boolean(
 		reservationId && reservationId.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.user && doc.user.match(/^[0-9a-fA-F]{24}$/)
 		&& (
 			(doc.period && doc.period.match(/^[0-9a-fA-F]{24}$/))
 			|| (doc.madeByGuest && typeof doc.madeByGuest === "string" && doc.madeByGuest.match(/^[0-9a-fA-F]{24}$/))
@@ -926,7 +939,7 @@ app.patch('/reservation/:id', async (req, res) => {
 				&& doc.guests.every(guest => guest && typeof guest === "string" && guest.match(/^[0-9a-fA-F]{24}$/))
 			)
 		)
-		&& Object.keys(doc).length <= 5
+		&& Object.keys(doc).length <= 6
 		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
 		&& Object.keys(doc.price).length <= 3
 		&& Object.keys(doc.price).every(attribute => allowedPriceAttributes.includes(attribute))
@@ -956,6 +969,7 @@ app.patch('/reservation/:id', async (req, res) => {
 			}
 		}
 		// update subdocument in database collection and give feedback
+		doc.user = mongo.ObjectId(doc.user);
 		doc.period = mongo.ObjectId(doc.period);
 		doc.madeByGuest = mongo.ObjectId(doc.madeByGuest);
 		doc.guests = doc.guests.map(guest => mongo.ObjectId(guest));
@@ -991,10 +1005,11 @@ app.put('/reservation/:id', async (req, res) => {
 	// console.log(doc);
 	let db = await connect();
 	// check data requirements fulfillment
-	const allowedAttributes = ["period", "madeByGuest", "currentState", "price", "guests"];
+	const allowedAttributes = ["user", "period", "madeByGuest", "currentState", "price", "guests"];
 	const allowedPriceAttributes = ["value", "currency", "valueInEur"];
 	const check = Boolean(
 		reservationId && reservationId.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.user && doc.user.match(/^[0-9a-fA-F]{24}$/)
 		&& doc.period && doc.period.match(/^[0-9a-fA-F]{24}$/)
 		&& doc.madeByGuest && typeof doc.madeByGuest === "string" && doc.madeByGuest.match(/^[0-9a-fA-F]{24}$/)
 		&& doc.currentState && typeof doc.currentState === "string"
@@ -1005,7 +1020,7 @@ app.put('/reservation/:id', async (req, res) => {
 		&& doc.price.valueInEur === null
 		&& doc.guests && Array.isArray(doc.guests)
 		&& doc.guests.every(guest => guest && typeof guest === "string" && guest.match(/^[0-9a-fA-F]{24}$/))
-		&& Object.keys(doc).length === 5
+		&& Object.keys(doc).length === 6
 		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
 		&& Object.keys(doc.price).length === 3
 		&& Object.keys(doc.price).every(attribute => allowedPriceAttributes.includes(attribute))
@@ -1035,6 +1050,7 @@ app.put('/reservation/:id', async (req, res) => {
 			}
 		}
 		// update subdocument in database collection and give feedback
+		doc.user = mongo.ObjectId(doc.user);
 		doc.period = mongo.ObjectId(doc.period);
 		doc.madeByGuest = mongo.ObjectId(doc.madeByGuest);
 		doc.guests = doc.guests.map(guest => mongo.ObjectId(guest));
@@ -1164,7 +1180,9 @@ app.get('/reservation/:id/guests', async (req, res) => {
 // get all periods
 app.get('/periods', async (req, res) => {
 	// generate selection and connect to database
-	let selection = {};
+	let selection = {
+		user: mongo.ObjectId(req.query.userId)
+	};
 	// console.log(selection);
 	let db = await connect();
 	// get all documents (and limit them if necessary) from database collection and send it
@@ -1184,22 +1202,24 @@ app.post('/periods', async (req, res) => {
 	// console.log(doc);
 	let db = await connect();
 	// check data requirements fulfillment
-	const allowedAttributes = ["name", "start", "end", "privateAccomodation"];
+	const allowedAttributes = ["user", "name", "start", "end", "privateAccomodation"];
 	const allowedPrivateAccomodationAttributes = ["id", "name"];
 	const check = Boolean(
-		doc.name && typeof doc.name === "string"
+		doc.user && doc.user.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.name && typeof doc.name === "string"
 		&& doc.start && typeof doc.start === "string"
 		&& doc.end && typeof doc.end === "string"
 		&& doc.privateAccomodation && typeof doc.privateAccomodation === "object"
 		&& doc.privateAccomodation.id && typeof doc.privateAccomodation.id === "string"
 		&& doc.privateAccomodation.id.match(/^[0-9a-fA-F]{24}$/)
 		&& doc.privateAccomodation.name && typeof doc.privateAccomodation.name === "string"
-		&& Object.keys(doc).length === 4 && Object.keys(doc.privateAccomodation).length === 2
+		&& Object.keys(doc).length === 5 && Object.keys(doc.privateAccomodation).length === 2
 		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
 		&& Object.keys(doc.privateAccomodation).every(attribute => allowedPrivateAccomodationAttributes.includes(attribute))
 	);
 	if (check) {
 		doc.privateAccomodation.id = mongo.ObjectId(doc.privateAccomodation.id);
+		doc.user = mongo.ObjectId(doc.user);
 		// save document to database collection and give feedback
 		let result = await db.collection('periods').insertOne(doc);
 		if (result.insertedId !== null) {
@@ -1227,11 +1247,16 @@ app.post('/periods', async (req, res) => {
 app.get('/period/:id', async (req, res) => {
 	// save data and connect to database
 	let periodId = req.params.id;
+	let userId = req.query.userId;
 	let db = await connect();
 	// check data requirements fulfillment
-	if (periodId && periodId.match(/^[0-9a-fA-F]{24}$/)) {
+	if (periodId && periodId.match(/^[0-9a-fA-F]{24}$/)
+		&& userId && userId.match(/^[0-9a-fA-F]{24}$/)) {
 		// get wanted document from database collection and send it
-		let period = await db.collection("periods").findOne({ _id: mongo.ObjectId(periodId) });
+		let period = await db.collection("periods").findOne({
+			_id: mongo.ObjectId(periodId),
+			user: mongo.ObjectId(userId)
+		});
 		// console.log(period);
 		res.status(200).json(period);
 	} else {
@@ -1288,10 +1313,11 @@ app.patch('/period/:id', async (req, res) => {
 	let periodId = req.params.id;
 	let db = await connect();
 	// check data requirements fulfillment
-	const allowedAttributes = ["name", "start", "end", "privateAccomodation"];
+	const allowedAttributes = ["user", "name", "start", "end", "privateAccomodation"];
 	const allowedPrivateAccomodationAttributes = ["id", "name"];
 	const check = Boolean(
 		periodId && periodId.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.user && doc.user.match(/^[0-9a-fA-F]{24}$/)
 		&& (
 			(doc.name && typeof doc.name === "string")
 			|| (doc.start && typeof doc.start === "string")
@@ -1303,7 +1329,7 @@ app.patch('/period/:id', async (req, res) => {
 				|| (doc.privateAccomodation.name && typeof doc.privateAccomodation.name === "string")
 			)
 		)
-		&& Object.keys(doc).length <= 4 && Object.keys(doc.privateAccomodation).length <= 2
+		&& Object.keys(doc).length <= 5 && Object.keys(doc.privateAccomodation).length <= 2
 		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
 		&& Object.keys(doc.privateAccomodation).every(attribute => allowedPrivateAccomodationAttributes.includes(attribute))
 		&& Object.values(doc).every(value => value !== "" && value !== null && value !== undefined)
@@ -1311,6 +1337,7 @@ app.patch('/period/:id', async (req, res) => {
 	);
 	if (check) {
 		doc.privateAccomodation.id = mongo.ObjectId(doc.privateAccomodation.id);
+		doc.user = mongo.ObjectId(doc.user);
 		// update document in database collection and give feedback
 		let result = await db.collection('periods').updateOne(
 			{ _id: mongo.ObjectId(periodId) },
@@ -1342,10 +1369,11 @@ app.put('/period/:id', async (req, res) => {
 	let periodId = req.params.id;
 	let db = await connect();
 	// check data requirements fulfillment
-	const allowedAttributes = ["name", "start", "end", "privateAccomodation"];
+	const allowedAttributes = ["user", "name", "start", "end", "privateAccomodation"];
 	const allowedPrivateAccomodationAttributes = ["id", "name"];
 	const check = Boolean(
 		periodId && periodId.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.user && doc.user.match(/^[0-9a-fA-F]{24}$/)
 		&& doc.name && typeof doc.name === "string"
 		&& doc.start && typeof doc.start === "string"
 		&& doc.end && typeof doc.end === "string"
@@ -1353,12 +1381,13 @@ app.put('/period/:id', async (req, res) => {
 		&& doc.privateAccomodation.id && typeof doc.privateAccomodation.id === "string"
 		&& doc.privateAccomodation.id.match(/^[0-9a-fA-F]{24}$/)
 		&& doc.privateAccomodation.name && typeof doc.privateAccomodation.name === "string"
-		&& Object.keys(doc).length === 4 && Object.keys(doc.privateAccomodation).length === 2
+		&& Object.keys(doc).length === 5 && Object.keys(doc.privateAccomodation).length === 2
 		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
 		&& Object.keys(doc.privateAccomodation).every(attribute => allowedPrivateAccomodationAttributes.includes(attribute))
 	);
 	if (check) {
 		doc.privateAccomodation.id = mongo.ObjectId(doc.privateAccomodation.id);
+		doc.user = mongo.ObjectId(doc.user);
 		// update document in database collection and give feedback
 		let result = await db.collection('periods').updateOne(
 			{ _id: mongo.ObjectId(periodId) },
@@ -1392,7 +1421,9 @@ app.put('/period/:id', async (req, res) => {
 // get all guests
 app.get('/guests', async (req, res) => {
 	// generate selection and connect to database
-	let selection = {};
+	let selection = {
+		user: mongo.ObjectId(req.query.userId)
+	};
 	if (req.query.actuallyGuests === "true") {
 		selection["newestPeriod.start"] = { $ne: null };
 		selection["newestPeriod.end"] = { $ne: null };
@@ -1419,10 +1450,11 @@ app.post('/guests', async (req, res) => {
 	// console.log(doc);
 	let db = await connect();
 	// check data requirements fulfillment
-	const allowedAttributes = ["firstName", "lastName", "city", "country", "email", "phoneNumber", "currentState", "newestPeriod"];
+	const allowedAttributes = ["user", "firstName", "lastName", "city", "country", "email", "phoneNumber", "currentState", "newestPeriod"];
 	const allowedNewestPeriodAttributes = ["start", "end", "privateAccomodation"];
 	const check = Boolean(
-		doc.firstName && typeof doc.firstName === "string"
+		doc.user && doc.user.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.firstName && typeof doc.firstName === "string"
 		&& doc.lastName && typeof doc.lastName === "string"
 		&& doc.city && typeof doc.city === "string"
 		&& doc.country && typeof doc.country === "string"
@@ -1430,12 +1462,13 @@ app.post('/guests', async (req, res) => {
 		&& ((doc.phoneNumber && typeof doc.phoneNumber === "string") || !doc.phoneNumber)
 		&& doc.currentState && typeof doc.currentState === "string"
 		&& doc.newestPeriod && !doc.newestPeriod.start && !doc.newestPeriod.end && !doc.newestPeriod.privateAccomodation
-		&& Object.keys(doc).length === 8 && Object.keys(doc.newestPeriod).length === 3
+		&& Object.keys(doc).length === 9 && Object.keys(doc.newestPeriod).length === 3
 		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
 		&& Object.keys(doc.newestPeriod).every(attribute => allowedNewestPeriodAttributes.includes(attribute))
 	);
 	if (check) {
 		// save document to database collection and give feedback
+		doc.user = mongo.ObjectId(doc.user);
 		let result = await db.collection('guests').insertOne(doc);
 		if (result.insertedId !== null) {
 			res.status(201).json({
@@ -1462,11 +1495,16 @@ app.post('/guests', async (req, res) => {
 app.get('/guest/:id', async (req, res) => {
 	// save data and connect to database
 	let guestId = req.params.id;
+	let userId = req.query.userId;
 	let db = await connect();
 	// check data requirements fulfillment
-	if (guestId && guestId.match(/^[0-9a-fA-F]{24}$/)) {
+	if (guestId && guestId.match(/^[0-9a-fA-F]{24}$/)
+		&& userId && userId.match(/^[0-9a-fA-F]{24}$/)) {
 		// get wanted document from database collection and send it
-		let guest = await db.collection("guests").findOne({ _id: mongo.ObjectId(guestId) });
+		let guest = await db.collection("guests").findOne({
+			_id: mongo.ObjectId(guestId),
+			user: mongo.ObjectId(userId)
+		});
 		// console.log(guest);
 		res.status(200).json(guest);
 	} else {
@@ -1530,10 +1568,11 @@ app.patch('/guest/:id', async (req, res) => {
 	let guestId = req.params.id;
 	let db = await connect();
 	// check data requirements fulfillment
-	const allowedAttributes = ["firstName", "lastName", "city", "country", "email", "phoneNumber", "currentState", "newestPeriod"];
+	const allowedAttributes = ["user", "firstName", "lastName", "city", "country", "email", "phoneNumber", "currentState", "newestPeriod"];
 	const allowedNewestPeriodAttributes = ["start", "end", "privateAccomodation"];
 	const check = Boolean(
 		guestId && guestId.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.user && doc.user.match(/^[0-9a-fA-F]{24}$/)
 		&& (
 			(doc.firstName && typeof doc.firstName === "string")
 			|| (doc.lastName && typeof doc.lastName === "string")
@@ -1551,11 +1590,12 @@ app.patch('/guest/:id', async (req, res) => {
 				&& (doc.newestPeriod.privateAccomodation && typeof doc.newestPeriod.privateAccomodation === "string")
 			)
 		)
-		&& Object.keys(doc).length <= 8
+		&& Object.keys(doc).length <= 9
 		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
 	);
 	if (check) {
 		// update document in database collection and give feedback
+		doc.user = mongo.ObjectId(doc.user);
 		let result = await db.collection('guests').updateOne(
 			{ _id: mongo.ObjectId(guestId) },
 			{ $set: doc }
@@ -1586,10 +1626,11 @@ app.put('/guest/:id', async (req, res) => {
 	let guestId = req.params.id;
 	let db = await connect();
 	// check data requirements fulfillment
-	const allowedAttributes = ["firstName", "lastName", "city", "country", "email", "phoneNumber", "currentState", "newestPeriod"];
+	const allowedAttributes = ["user", "firstName", "lastName", "city", "country", "email", "phoneNumber", "currentState", "newestPeriod"];
 	const allowedNewestPeriodAttributes = ["start", "end", "privateAccomodation"];
 	const check = Boolean(
 		guestId && guestId.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.user && doc.user.match(/^[0-9a-fA-F]{24}$/)
 		&& doc.firstName && typeof doc.firstName === "string"
 		&& doc.lastName && typeof doc.lastName === "string"
 		&& doc.city && typeof doc.city === "string"
@@ -1604,12 +1645,13 @@ app.put('/guest/:id', async (req, res) => {
 			(doc.newestPeriod.privateAccomodation && typeof doc.newestPeriod.privateAccomodation === "string")
 			|| !doc.newestPeriod.privateAccomodation
 		)
-		&& Object.keys(doc).length === 8 && Object.keys(doc.newestPeriod).length === 3
+		&& Object.keys(doc).length === 9 && Object.keys(doc.newestPeriod).length === 3
 		&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
 		&& Object.keys(doc.newestPeriod).every(attribute => allowedNewestPeriodAttributes.includes(attribute))
 	);
 	if (check) {
 		// update document in database collection and give feedback
+		doc.user = mongo.ObjectId(doc.user);
 		let result = await db.collection('guests').updateOne(
 			{ _id: mongo.ObjectId(guestId) },
 			{ $set: doc }
@@ -1848,7 +1890,9 @@ app.put('/note/:id', async (req, res) => {
 // get all to do lists
 app.get('/todolists', async (req, res) => {
 	// generate selection and connect to database
-	let selection = {};
+	let selection = {
+		user: mongo.ObjectId(req.query.userId)
+	};
 	// console.log(req.query.completed);
 	if (req.query.completed === "false") selection["completed"] = false;
 	else if (req.query.completed === "true") selection["completed"] = true;
@@ -1868,7 +1912,8 @@ app.post('/todolists', async (req, res) => {
 	let db = await connect();
 	// check data requirements fulfillment
 	const check = Boolean(
-		doc.title && typeof doc.title === "string"
+		doc.user && doc.user.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.title && typeof doc.title === "string"
 		&& doc.date && typeof doc.date === "string"
 		&& doc.completed !== "" && doc.completed !== null && doc.completed !== undefined && typeof doc.completed === "boolean"
 		&& doc.items.length > 0
@@ -1883,10 +1928,11 @@ app.post('/todolists', async (req, res) => {
 			(doc.completed === true && doc.items.every(item => item.completed === true))
 			|| (doc.completed === false && doc.items.some(item => item.completed === false))
 		)
-		&& Object.keys(doc).length === 4
+		&& Object.keys(doc).length === 5
 	);
 	if (check) {
 		// save document to database collection and give feedback
+		doc.user = mongo.ObjectId(doc.user);
 		let result = await db.collection('todolists').insertOne(doc);
 		if (result.insertedId !== null) {
 			res.status(201).json({
@@ -1913,11 +1959,16 @@ app.post('/todolists', async (req, res) => {
 app.get('/todolist/:id', async (req, res) => {
 	// save data and connect to database
 	let toDoListId = req.params.id;
+	let userId = req.query.userId;
 	let db = await connect();
 	// check data requirements fulfillment
-	if (toDoListId && toDoListId.match(/^[0-9a-fA-F]{24}$/)) {
+	if (toDoListId && toDoListId.match(/^[0-9a-fA-F]{24}$/)
+		&& userId && userId.match(/^[0-9a-fA-F]{24}$/)) {
 		// get wanted document from database collection and send it
-		let toDoList = await db.collection("todolists").findOne({ _id: mongo.ObjectId(toDoListId) });
+		let toDoList = await db.collection("todolists").findOne({
+			_id: mongo.ObjectId(toDoListId),
+			user: mongo.ObjectId(userId)
+		});
 		// console.log(toDoList);
 		res.status(200).json(toDoList);
 	} else {
@@ -1965,10 +2016,11 @@ app.patch('/todolist/:id', async (req, res) => {
 	let toDoListId = req.params.id;
 	let db = await connect();
 	// check data requirements fulfillment
-	const allowedAttributes = ["title", "date", "completed", "items"];
+	const allowedAttributes = ["user", "title", "date", "completed", "items"];
 	const allowedItemAttributes = ["name", "position", "completed"];
 	const check = Boolean(
 		toDoListId && toDoListId.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.user && doc.user.match(/^[0-9a-fA-F]{24}$/)
 		&& (
 			(doc.title && typeof doc.title === "string")
 			|| (doc.date && typeof doc.date === "string")
@@ -1998,13 +2050,14 @@ app.patch('/todolist/:id', async (req, res) => {
 			)
 		)
 		&& (
-			Object.keys(doc).length <= 4
+			Object.keys(doc).length <= 5
 			&& Object.keys(doc).every(attribute => allowedAttributes.includes(attribute))
 			&& Object.values(doc).every(value => value !== "" && value !== null && value !== undefined)
 		)
 	);
 	if (check) {
 		// update document in database collection and give feedback
+		doc.user = mongo.ObjectId(doc.user);
 		let result = await db.collection('todolists').updateOne(
 			{ _id: mongo.ObjectId(toDoListId) },
 			{ $set: doc }
@@ -2037,6 +2090,7 @@ app.put('/todolist/:id', async (req, res) => {
 	// check data requirements fulfillment
 	const check = Boolean(
 		toDoListId && toDoListId.match(/^[0-9a-fA-F]{24}$/)
+		&& doc.user && doc.user.match(/^[0-9a-fA-F]{24}$/)
 		&& doc.title && typeof doc.title === "string"
 		&& doc.date && typeof doc.date === "string"
 		&& doc.completed !== "" && doc.completed !== null && doc.completed !== undefined && typeof doc.completed === "boolean"
@@ -2052,10 +2106,11 @@ app.put('/todolist/:id', async (req, res) => {
 			(doc.completed === true && doc.items.every(item => item.completed === true))
 			|| (doc.completed === false && doc.items.some(item => item.completed === false))
 		)
-		&& Object.keys(doc).length === 4
+		&& Object.keys(doc).length === 5
 	);
 	if (check) {
 		// update document in database collection and give feedback
+		doc.user = mongo.ObjectId(doc.user);
 		let result = await db.collection('todolists').updateOne(
 			{ _id: mongo.ObjectId(toDoListId) },
 			{ $set: doc }
