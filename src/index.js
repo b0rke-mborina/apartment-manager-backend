@@ -6,6 +6,7 @@ import cors from 'cors';
 import mongo from 'mongodb';
 
 import connect from './db.js';
+import auth from "./auth.js";
 import { AxiosServiceExchangeRates } from './services.js';
 import storage from './storage.js';
 
@@ -30,10 +31,61 @@ app.get('/', (req, res) => {
 
 // route or path: /user/current
 
-// get current user
-app.get('/user/current', async (req, res) => {
-	let db = await connect();
-	res.send(storage.User[0]);
+// registration: get current user details
+app.post('/user', async (req, res) => {
+	// save data
+	let user = req.body;
+	console.log(user);
+	// check data requirements fulfillment
+	const check = Boolean(
+		user.email && typeof user.email === "string" && user.email.toLowerCase().match(
+		  /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+		)
+		&& user.password && typeof user.password === "string"
+		&& user.firstName && typeof user.firstName === "string"
+		&& user.lastName && typeof user.lastName === "string"
+		&& Object.keys(user).length === 4
+	);
+	if (check) {
+		// call function for registration and give feedback
+		// console.log(user);
+		let id = await auth.registerUser(user);
+		if (id) {
+			res.status(200).json({ id: id });
+		} else {
+			// send message user already exists if that is the case
+			res.status(501).json({
+				status: "User already exists."
+			});
+		}
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.'
+		});
+	}
+});
+
+
+// route or path: /user/secret
+
+// returns user secret
+app.get("/user/secret", [auth.verify], (req, res) => {
+	res.json({ message: "This is secret to " + req.jwt.email });
+});
+
+
+// route or path: /user/auth
+
+// login user
+app.post("/user/auth", async (req, res) => {
+	let user = req.body;
+	let result = await auth.loginUser(user.email, user.password);
+	if (result) {
+		res.json(result);
+	} else {
+		res.status(403).json({ status: "Could not authenticate." });
+	}
 });
 
 
