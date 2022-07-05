@@ -8,7 +8,6 @@ import mongo from 'mongodb';
 import connect from './db.js';
 import auth from "./auth.js";
 import { AxiosServiceExchangeRates } from './services.js';
-import storage from './storage.js';
 
 const app = express();
 const port = 3000;
@@ -35,7 +34,8 @@ app.get('/', (req, res) => {
 app.post('/user', async (req, res) => {
 	// save data
 	let user = req.body;
-	console.log(user);
+	// console.log(user);
+	let db = await connect();
 	// check data requirements fulfillment
 	const check = Boolean(
 		user.email && typeof user.email === "string" && user.email.toLowerCase().match(
@@ -50,8 +50,19 @@ app.post('/user', async (req, res) => {
 		// call function for registration and give feedback
 		// console.log(user);
 		let id = await auth.registerUser(user);
+		// console.log(id);
 		if (id) {
-			res.status(200).json({ id: id });
+			let resultAnalytics = await db.collection('analytics').insertOne({
+				user: id,
+				accomodations: []
+			});
+			if (resultAnalytics.insertedId !== null) {
+				res.status(200).json({ id: id });
+			} else {
+				res.status(501).json({
+					status: 'User creation failed.',
+				});
+			}
 		} else {
 			// send message user already exists if that is the case
 			res.status(501).json({
@@ -97,31 +108,35 @@ app.post("/user/auth", async (req, res) => {
 
 // get all private accomodations with their addresses
 app.get('/privateaccomodations', async (req, res) => {
-	// generate selection and connect to database
-	let selection = {
-		user: mongo.ObjectId(req.query.userId)
-	};
-	if (req.query.state === "occupied") selection["currentState"] = "OCCUPIED";
-	else if (req.query.state === "available") selection["currentState"] = "AVAILABLE";
-	else if (req.query.state === "pending") selection["currentState"] = "PENDING";
-	// console.log(selection);
-	let db = await connect();
-	// get all documents from database collection and send it
-	let cursor = await db.collection("privateaccomodations").find(selection);
-	const limit = req.query.limit;
-	if (limit && Number.isInteger(Number(limit)) && Number(limit) >= 0) {
-		cursor = cursor.limit(Number(limit));
+	if (req.query.userId && req.query.userId.match(/^[0-9a-fA-F]{24}$/)) {
+		// generate selection and connect to database
+		let selection = {
+			user: mongo.ObjectId(req.query.userId)
+		};
+		if (req.query.state === "occupied") selection["currentState"] = "OCCUPIED";
+		else if (req.query.state === "available") selection["currentState"] = "AVAILABLE";
+		else if (req.query.state === "pending") selection["currentState"] = "PENDING";
+		// console.log(selection);
+		let db = await connect();
+		// get all documents from database collection and send it
+		let cursor = await db.collection("privateaccomodations").find(selection);
+		const limit = req.query.limit;
+		if (limit && Number.isInteger(Number(limit)) && Number(limit) >= 0) {
+			cursor = cursor.limit(Number(limit));
+		}
+		let results = await cursor.toArray();
+		// get belonging addresses
+		let accomodations = results.map(async accomodation => {
+			let address = await db.collection("addresses").findOne({ _id: mongo.ObjectId(accomodation.location) });
+			accomodation.location = address;
+			// console.log(accomodation);
+			return accomodation;
+		});
+		accomodations = await Promise.all(accomodations);
+		res.status(200).json(accomodations);
+	} else {
+		res.status(200).json([]);
 	}
-	let results = await cursor.toArray();
-	// get belonging addresses
-	let accomodations = results.map(async accomodation => {
-		let address = await db.collection("addresses").findOne({ _id: mongo.ObjectId(accomodation.location) });
-		accomodation.location = address;
-		// console.log(accomodation);
-		return accomodation;
-	});
-	accomodations = await Promise.all(accomodations);
-	res.status(200).json(accomodations);
 });
 
 // add / insert one private accomodation (and address if needed)
@@ -649,68 +664,72 @@ app.get('/address/:id/privateaccomodations', async (req, res) => {
 
 // get all reservations
 app.get('/reservations', async (req, res) => {
-	// connect to database
-	let db = await connect();
-	// generate aggregation options for reservations and their periods and main guests
-	let aggregation = [
-		{
-			$match: { user: mongo.ObjectId(req.query.userId) }
-		},
-		{
-			$lookup: {
-				from: "periods",
-				localField: "period",
-				foreignField: "_id",
-				as: 'period'
-			}
-		},
-		{ $unwind: '$period' },
-		{
-			$lookup: {
-				from: "guests",
-				localField: "madeByGuest",
-				foreignField: "_id",
-				as: 'madeByGuest'
-			}
-		},
-		{ $unwind: '$madeByGuest' }
-	];
-	// add filter for relevant reservations if requested
-	if (req.query.relevant == "true") {
-		aggregation.push({
-			$match: {
-				$or: [
-					{ currentState: "INQUIRY" },
-					{ currentState: "PENDING" },
-					{ currentState: "CONFIRMED" }
-				]
-			}
-		});
+	if (req.query.userId && req.query.userId.match(/^[0-9a-fA-F]{24}$/)) {
+		// connect to database
+		let db = await connect();
+		// generate aggregation options for reservations and their periods and main guests
+		let aggregation = [
+			{
+				$match: { user: mongo.ObjectId(req.query.userId) }
+			},
+			{
+				$lookup: {
+					from: "periods",
+					localField: "period",
+					foreignField: "_id",
+					as: 'period'
+				}
+			},
+			{ $unwind: '$period' },
+			{
+				$lookup: {
+					from: "guests",
+					localField: "madeByGuest",
+					foreignField: "_id",
+					as: 'madeByGuest'
+				}
+			},
+			{ $unwind: '$madeByGuest' }
+		];
+		// add filter for relevant reservations if requested
+		if (req.query.relevant == "true") {
+			aggregation.push({
+				$match: {
+					$or: [
+						{ currentState: "INQUIRY" },
+						{ currentState: "PENDING" },
+						{ currentState: "CONFIRMED" }
+					]
+				}
+			});
+		}
+		// add filter for future reservations if requested
+		if (req.query.upcoming == "true") {
+			const current = new Date();
+			let year = current.getFullYear();
+			let month = current.getMonth()+1;
+			let day = current.getDate();
+			if (month < 10) month = "0" + month;
+			if (day < 10) day = "0" + day;
+			const today = `${year}-${month}-${day}`;
+			aggregation.push({ $match: { "period.start" : { $gte: today } } });
+		}
+		// get all reservations and their periods from database collections using aggregation
+		// (sort if upcoming and limit if necessary)
+		let cursor = await db.collection("reservations").aggregate(aggregation);
+		if (req.query.upcoming == "true") cursor = cursor.sort({ "period.start": 1 })
+		// apply limit to cursor if requested
+		const limit = req.query.limit;
+		if (limit && Number.isInteger(Number(limit)) && Number(limit) >= 0) {
+			cursor = cursor.limit(Number(limit));
+		}
+		let reservations = await cursor.toArray();
+		// send all documents and subdocuments found
+		// console.log(reservations);
+		res.status(200).json(reservations);
+	} else {
+		res.status(200).json([]);
 	}
-	// add filter for future reservations if requested
-	if (req.query.upcoming == "true") {
-		const current = new Date();
-		let year = current.getFullYear();
-		let month = current.getMonth()+1;
-		let day = current.getDate();
-		if (month < 10) month = "0" + month;
-		if (day < 10) month = "0" + day;
-		const today = `${year}-${month}-${day}`;
-		aggregation.push({ $match: { "period.start" : { $gte: today } } });
-	}
-	// get all reservations and their periods from database collections using aggregation
-	// (sort if upcoming and limit if necessary)
-	let cursor = await db.collection("reservations").aggregate(aggregation);
-	if (req.query.upcoming == "true") cursor = cursor.sort({ "period.start": 1 })
-	// apply limit to cursor if requested
-	const limit = req.query.limit;
-	if (limit && Number.isInteger(Number(limit)) && Number(limit) >= 0) {
-		cursor = cursor.limit(Number(limit));
-	}
-	let reservations = await cursor.toArray();
-	// send all documents and subdocuments found
-	// console.log(reservations);
-	res.status(200).json(reservations);
 });
 
 // add / insert one reservation
@@ -1179,20 +1198,24 @@ app.get('/reservation/:id/guests', async (req, res) => {
 
 // get all periods
 app.get('/periods', async (req, res) => {
-	// generate selection and connect to database
-	let selection = {
-		user: mongo.ObjectId(req.query.userId)
-	};
-	// console.log(selection);
-	let db = await connect();
-	// get all documents (and limit them if necessary) from database collection and send it
-	let cursor = await db.collection("periods").find(selection);
-	const limit = req.query.limit;
-	if (limit && Number.isInteger(Number(limit)) && Number(limit) >= 0) {
-		cursor = cursor.limit(Number(limit));
+	if (req.query.userId && req.query.userId.match(/^[0-9a-fA-F]{24}$/)) {
+		// generate selection and connect to database
+		let selection = {
+			user: mongo.ObjectId(req.query.userId)
+		};
+		// console.log(selection);
+		let db = await connect();
+		// get all documents (and limit them if necessary) from database collection and send it
+		let cursor = await db.collection("periods").find(selection);
+		const limit = req.query.limit;
+		if (limit && Number.isInteger(Number(limit)) && Number(limit) >= 0) {
+			cursor = cursor.limit(Number(limit));
+		}
+		let results = await cursor.toArray();
+		res.status(200).json(results);
+	} else {
+		res.status(200).json([]);
 	}
-	let results = await cursor.toArray();
-	res.status(200).json(results);
 });
 
 // add / insert one period
@@ -1420,27 +1443,31 @@ app.put('/period/:id', async (req, res) => {
 
 // get all guests
 app.get('/guests', async (req, res) => {
-	// generate selection and connect to database
-	let selection = {
-		user: mongo.ObjectId(req.query.userId)
-	};
-	if (req.query.actuallyGuests === "true") {
-		selection["newestPeriod.start"] = { $ne: null };
-		selection["newestPeriod.end"] = { $ne: null };
-	} else if (req.query.actuallyGuests === "false") {
-		selection["newestPeriod.start"] = null;
-		selection["newestPeriod.end"] = null;
+	if (req.query.userId && req.query.userId.match(/^[0-9a-fA-F]{24}$/)) {
+		// generate selection and connect to database
+		let selection = {
+			user: mongo.ObjectId(req.query.userId)
+		};
+		if (req.query.actuallyGuests === "true") {
+			selection["newestPeriod.start"] = { $ne: null };
+			selection["newestPeriod.end"] = { $ne: null };
+		} else if (req.query.actuallyGuests === "false") {
+			selection["newestPeriod.start"] = null;
+			selection["newestPeriod.end"] = null;
+		}
+		// console.log(selection);
+		let db = await connect();
+		// get all documents (and limit them if necessary) from database collection and send it
+		let cursor = await db.collection("guests").find(selection);
+		const limit = req.query.limit;
+		if (limit && Number.isInteger(Number(limit)) && Number(limit) >= 0) {
+			cursor = cursor.limit(Number(limit));
+		}
+		let results = await cursor.toArray();
+		res.status(200).json(results);
+	} else {
+		res.status(200).json([]);
 	}
-	// console.log(selection);
-	let db = await connect();
-	// get all documents (and limit them if necessary) from database collection and send it
-	let cursor = await db.collection("guests").find(selection);
-	const limit = req.query.limit;
-	if (limit && Number.isInteger(Number(limit)) && Number(limit) >= 0) {
-		cursor = cursor.limit(Number(limit));
-	}
-	let results = await cursor.toArray();
-	res.status(200).json(results);
 });
 
 // add / insert one guest
@@ -1683,19 +1710,23 @@ app.put('/guest/:id', async (req, res) => {
 
 // get all notes
 app.get('/notes', async (req, res) => {
-	// generate selection and connect to database
-	let selection = {
-		user: mongo.ObjectId(req.query.userId)
-	};
-	// console.log(req.query.important);
-	if (req.query.important === "true") selection["important"] = true;
-	else if (req.query.important === "false") selection["important"] = false;
-	// console.log(selection);
-	let db = await connect();
-	// get all documents from database collection and send it
-	let cursor = await db.collection("notes").find(selection);
-	let results = await cursor.toArray();
-	res.status(200).json(results);
+	if (req.query.userId && req.query.userId.match(/^[0-9a-fA-F]{24}$/)) {
+		// generate selection and connect to database
+		let selection = {
+			user: mongo.ObjectId(req.query.userId)
+		};
+		// console.log(req.query.important);
+		if (req.query.important === "true") selection["important"] = true;
+		else if (req.query.important === "false") selection["important"] = false;
+		// console.log(selection);
+		let db = await connect();
+		// get all documents from database collection and send it
+		let cursor = await db.collection("notes").find(selection);
+		let results = await cursor.toArray();
+		res.status(200).json(results);
+	} else {
+		res.status(200).json([]);
+	}
 });
 
 // add / insert one note
@@ -1889,19 +1920,23 @@ app.put('/note/:id', async (req, res) => {
 
 // get all to do lists
 app.get('/todolists', async (req, res) => {
-	// generate selection and connect to database
-	let selection = {
-		user: mongo.ObjectId(req.query.userId)
-	};
-	// console.log(req.query.completed);
-	if (req.query.completed === "false") selection["completed"] = false;
-	else if (req.query.completed === "true") selection["completed"] = true;
-	// console.log(selection);
-	let db = await connect();
-	// get all documents from database collection and send it
-	let cursor = await db.collection("todolists").find(selection);
-	let results = await cursor.toArray();
-	res.status(200).json(results);
+	if (req.query.userId && req.query.userId.match(/^[0-9a-fA-F]{24}$/)) {
+		// generate selection and connect to database
+		let selection = {
+			user: mongo.ObjectId(req.query.userId)
+		};
+		// console.log(req.query.completed);
+		if (req.query.completed === "false") selection["completed"] = false;
+		else if (req.query.completed === "true") selection["completed"] = true;
+		// console.log(selection);
+		let db = await connect();
+		// get all documents from database collection and send it
+		let cursor = await db.collection("todolists").find(selection);
+		let results = await cursor.toArray();
+		res.status(200).json(results);
+	} else {
+		res.status(200).json([]);
+	}
 });
 
 // add / insert one to do list
@@ -2141,12 +2176,22 @@ app.put('/todolist/:id', async (req, res) => {
 // route or path: /analytics
 
 // get analytics
-app.get('/analytics', (req, res) => { // async
+app.get('/analytics', async (req, res) => { // async
 	/*let db = await connect();
 	let cursor = await db.collection("analytics").find();
 	let results = await cursor.toArray();
 	res.json(results);*/
-	res.send(storage.Analytics);
+	const userId = req.query.userId;
+	let db = await connect();
+	if (userId && userId.match(/^[0-9a-fA-F]{24}$/)) {
+		let analytics = await db.collection("analytics").findOne({ user: mongo.ObjectId(userId) });
+		res.status(200).json(analytics);
+	} else {
+		// send message data requirements not met if that is the case
+		res.status(400).json({
+			status: 'Data requirements not met.',
+		});
+	}
 });
 
 
