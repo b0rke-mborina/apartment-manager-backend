@@ -52,17 +52,17 @@ app.post('/user', async (req, res) => {
 		let id = await auth.registerUser(user);
 		// console.log(id);
 		if (id) {
-			let resultAnalytics = await db.collection('analytics').insertOne({
+			/*let resultAnalytics = await db.collection('analytics').insertOne({
 				user: id,
 				accomodations: []
 			});
-			if (resultAnalytics.insertedId !== null) {
+			if (resultAnalytics.insertedId !== null) {*/
 				res.status(200).json({ id: id });
-			} else {
+			/*} else {
 				res.status(501).json({
 					status: 'User creation failed.',
 				});
-			}
+			}*/
 		} else {
 			// send message user already exists if that is the case
 			res.status(501).json({
@@ -2176,11 +2176,11 @@ app.put('/todolist/:id', async (req, res) => {
 // route or path: /analytics
 
 // get analytics
-app.get('/analytics', async (req, res) => { // async
-	/*let db = await connect();
+/*app.get('/analytics', async (req, res) => { // async
+	let db = await connect();
 	let cursor = await db.collection("analytics").find();
 	let results = await cursor.toArray();
-	res.json(results);*/
+	res.json(results);
 	const userId = req.query.userId;
 	let db = await connect();
 	if (userId && userId.match(/^[0-9a-fA-F]{24}$/)) {
@@ -2192,7 +2192,7 @@ app.get('/analytics', async (req, res) => { // async
 			status: 'Data requirements not met.',
 		});
 	}
-});
+});*/
 
 
 
